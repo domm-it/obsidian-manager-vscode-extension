@@ -1,0 +1,95 @@
+{
+  "manifestVersion": "1.0",
+  "name": "obsidian-manager",
+  "displayName": "Obsidian Manager",
+  "description": "Adds a button and a vault/file manager view to open and manage Markdown files with Obsidian.",
+  "version": "1.0.0",
+  "publisher": "domm-it",
+  "icon": "images/logo.png",
+  
+  "metadata": {
+    "id": "obsidian-manager",
+    "publisherId": "domm-it",
+    "publisherDisplayName": "domm-it",
+    "targetPlatform": "universal",
+    "isApplicationScoped": false,
+    "updated": "2024-10-26T00:00:00.000Z",
+    "isPreReleaseVersion": false,
+    "installedTimestamp": 0,
+    "preRelease": false
+  },
+  
+  "capabilities": {
+    "virtualWorkspaces": {
+      "supported": "limited",
+      "description": "This extension works with limited functionality in virtual workspaces."
+    },
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "This extension requires workspace trust to access local files."
+    }
+  },
+  
+  "extensionPack": [],
+  "extensionDependencies": [],
+  
+  "sponsor": {
+    "url": "https://github.com/sponsors/domm-it"
+  },
+  
+  "qna": "marketplace",
+  
+  "badges": [
+    {
+      "url": "https://img.shields.io/visual-studio-marketplace/v/domm-it.obsidian-manager",
+      "href": "https://marketplace.visualstudio.com/items?itemName=domm-it.obsidian-manager",
+      "description": "Visual Studio Marketplace Version"
+    },
+    {
+      "url": "https://img.shields.io/visual-studio-marketplace/d/domm-it.obsidian-manager",
+      "href": "https://marketplace.visualstudio.com/items?itemName=domm-it.obsidian-manager",
+      "description": "Visual Studio Marketplace Downloads"
+    },
+    {
+      "url": "https://img.shields.io/visual-studio-marketplace/r/domm-it.obsidian-manager",
+      "href": "https://marketplace.visualstudio.com/items?itemName=domm-it.obsidian-manager",
+      "description": "Visual Studio Marketplace Rating"
+    }
+  ],
+  
+  "files": [
+    {
+      "assetType": "Microsoft.VisualStudio.Code.Manifest",
+      "source": "package.json"
+    },
+    {
+      "assetType": "Microsoft.VisualStudio.Services.Content.Details",
+      "source": "README.md"
+    },
+    {
+      "assetType": "Microsoft.VisualStudio.Services.Content.Changelog",
+      "source": "CHANGELOG.md"
+    },
+    {
+      "assetType": "Microsoft.VisualStudio.Services.Content.License",
+      "source": "LICENSE"
+    },
+    {
+      "assetType": "Microsoft.VisualStudio.Services.Icons.Default",
+      "source": "images/logo.png"
+    }
+  ],
+  
+  "localizations": [
+    {
+      "languageId": "en",
+      "languageName": "English",
+      "localizedLanguageName": "English"
+    },
+    {
+      "languageId": "it", 
+      "languageName": "Italian",
+      "localizedLanguageName": "Italiano"
+    }
+  ]
+}
