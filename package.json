@@ -1,0 +1,217 @@
+{
+	"name": "obsidian-manager",
+	"displayName": "Obsidian manager",
+	"description": "Adds a button and a vault/file manager view to open and manage Markdown files with Obsidian.",
+	"version": "1.0.0",
+	"publisher": "domm-it",
+	"icon": "images/logo.png",
+	"engines": {
+		"vscode": "^1.60.0"
+	},
+	"categories": [
+		"Other"
+	],
+	"activationEvents": [
+		"onLanguage:markdown"
+	],
+	"main": "./out/extension.js",
+	"scripts": {
+		"vscode:prepublish": "npm run compile",
+		"compile": "tsc -p .",
+		"package": "npm run compile && node ./node_modules/.bin/vsce package",
+		"watch": "tsc -w -p ."
+	},
+	"devDependencies": {
+		"@types/node": "^18.19.130",
+		"@types/vscode": "^1.60.0",
+		"typescript": "^4.9.0",
+		"vscode-test": "^1.6.0",
+		"@vscode/vsce": "^2.6.0"
+	},
+	"contributes": {
+		"commands": [
+			{
+				"command": "obsidianManager.refreshView",
+				"title": "Refresh",
+				"category": "Obsidian manager",
+				"icon": "$(refresh)"
+			},
+			{
+				"command": "obsidianManager.openFile.icon",
+				"title": "Open in Obsidian",
+				"category": "Obsidian manager",
+				"icon": {
+					"light": "images/obsidian.svg",
+					"dark": "images/obsidian.svg"
+				}
+			},
+			{
+				"command": "obsidianManager.openFileFromView",
+				"title": "5 - Open in Obsidian",
+				"category": "Obsidian manager",
+				"icon": "$(link-external)"
+			},
+			{
+				"command": "obsidianManager.createFolder",
+				"title": "0 - New folder",
+				"category": "Obsidian manager",
+				"icon": "$(new-folder)"
+			},
+			{
+				"command": "obsidianManager.createFileInFolder",
+				"title": "1 - New note",
+				"category": "Obsidian manager",
+				"icon": "$(new-file)"
+			},
+			{
+				"command": "obsidianManager.renameItem",
+				"title": "2 - Rename",
+				"category": "Obsidian manager",
+				"icon": "$(edit)"
+			},
+			{
+				"command": "obsidianManager.deleteItem",
+				"title": "3 - Delete",
+				"category": "Obsidian manager",
+				"icon": "$(trash)"
+			},
+			{
+				"command": "obsidianManager.openSettings",
+				"title": "Open settings",
+				"category": "Obsidian manager",
+				"icon": "$(gear)"
+			},
+			{
+				"command": "obsidianManager.toggleViewMode",
+				"title": "Toggle view mode",
+				"category": "Obsidian manager",
+				"icon": "$(list-unordered)"
+			}
+			,
+			{
+				"command": "obsidianManager.toggleExpandAll",
+				"title": "Toggle expand/collapse all",
+				"category": "Obsidian manager",
+				"icon": "$(collapse-all)"
+			}
+		],
+		"menus": {
+			"editor/title": [
+				{
+					"command": "obsidianManager.openFile.icon",
+					"when": "resourceExtname == .md || editorLangId == markdown",
+					"group": "navigation"
+				}
+			],
+			"view/item/context": [
+				{
+					"command": "obsidianManager.openFileFromView",
+					"when": "view == obsidianFiles && viewItem == obsidianFile",
+					"group": "inline"
+				},
+				{
+					"command": "obsidianManager.createFileInFolder",
+					"when": "view == obsidianFiles && viewItem == obsidianFolder",
+					"group": "inline"
+				},
+				{
+					"command": "obsidianManager.createFolder",
+					"when": "view == obsidianFiles && viewItem == obsidianFolder",
+					"group": "inline"
+				},
+				{
+					"command": "obsidianManager.renameItem",
+					"when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
+					"group": "inline"
+				},
+				{
+					"command": "obsidianManager.deleteItem",
+					"when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
+					"group": "inline"
+				}
+			],
+			"view/title": [
+				{
+					"command": "obsidianManager.refreshView",
+					"when": "view == obsidianFiles",
+					"group": "navigation"
+				},
+				{
+					"command": "obsidianManager.toggleViewMode",
+					"when": "view == obsidianFiles && !obsidianManager.viewModeIsList",
+					"group": "navigation"
+				},
+				{
+					"command": "obsidianManager.toggleExpandAll",
+					"title": "Toggle expand/collapse all",
+					"when": "view == obsidianFiles",
+					"group": "navigation@2",
+					"icon": "$(collapse-all)"
+				},
+				{
+					"command": "obsidianManager.toggleViewMode",
+					"when": "view == obsidianFiles && obsidianManager.viewModeIsList",
+					"group": "navigation"
+				},
+				{
+					"command": "obsidianManager.createFolder",
+					"when": "view == obsidianFiles",
+					"group": "navigation"
+				},
+				{
+					"command": "obsidianManager.openSettings",
+					"when": "view == obsidianFiles",
+					"group": "navigation"
+				}
+			]
+		},
+		"configuration": {
+			"title": "Obsidian manager",
+			"properties": {
+                    
+				"obsidianManager.vault": {
+					"type": "string",
+					"default": "",
+					"description": "Absolute path to your Obsidian vault folder. The sidebar view will read Markdown files from this folder and the extension will use this path when building obsidian:// links."
+				},
+				"obsidianManager.expandFoldersOnLoad": {
+					"type": "boolean",
+					"default": true,
+					"description": "If true the folders in the Obsidian view will be expanded by default when the view is shown."
+				},
+				"obsidianManager.showIcons": {
+					"type": "boolean",
+					"default": true,
+					"description": "Show icons next to files and folders in the Obsidian sidebar view. Set to false to hide icons for a compact list."
+				},
+                
+				"obsidianManager.viewMode": {
+					"type": "string",
+					"enum": [
+						"folders",
+						"list"
+					],
+					"default": "folders",
+					"description": "How to present files in the sidebar: 'folders' shows hierarchical folders, 'list' shows a flat list of Markdown files."
+				}
+			}
+		},
+		"viewsContainers": {
+			"activitybar": [
+				{
+					"id": "obsidianManager",
+					"title": "Obsidian",
+					"icon": "images/obsidian-icon.svg"
+				}
+			]
+		},
+		"views": {
+			"obsidianManager": [
+				{
+					"id": "obsidianFiles",
+					"name": "Files"
+				}
+			]
+		}
+	}
+}
