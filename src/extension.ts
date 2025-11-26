@@ -101,7 +101,14 @@ class ObsidianDragAndDropController implements vscode.TreeDragAndDropController<
         // If file open in editor, reopen new uri
         for (const ed of vscode.window.visibleTextEditors) {
           if (ed.document.uri.fsPath === srcPath) {
-            await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(destPath));
+            const cfg = vscode.workspace.getConfiguration('obsidianManager');
+            const openFileMode = cfg.get<string>('openFileMode', 'preview');
+            if (openFileMode === 'preview') {
+              await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(destPath));
+            } else {
+              const document = await vscode.workspace.openTextDocument(vscode.Uri.file(destPath));
+              await vscode.window.showTextDocument(document, { preview: false });
+            }
             break;
           }
         }
@@ -192,7 +199,22 @@ export async function activate(context: vscode.ExtensionContext) {
   const disposableA = vscode.commands.registerCommand('obsidianManager.openFile', openHandler);
   const disposableB = vscode.commands.registerCommand('obsidianManager.openFile.icon', openHandler);
 
-  context.subscriptions.push(disposableA, disposableB);
+  // Command to open file with mode setting
+  const openFileWithModeCmd = vscode.commands.registerCommand('obsidianManager.openFileWithMode', async (uri: vscode.Uri) => {
+    const cfg = vscode.workspace.getConfiguration('obsidianManager');
+    const openFileMode = cfg.get<string>('openFileMode', 'preview');
+    
+    if (openFileMode === 'preview') {
+      // Open in preview mode (read-only)
+      await vscode.commands.executeCommand('markdown.showPreview', uri);
+    } else {
+      // Open in edit mode
+      const document = await vscode.workspace.openTextDocument(uri);
+      await vscode.window.showTextDocument(document, { preview: false });
+    }
+  });
+
+  context.subscriptions.push(disposableA, disposableB, openFileWithModeCmd);
 
   // Register command used by the view to open a file in Obsidian
   const openFromView = vscode.commands.registerCommand('obsidianManager.openFileFromView', async (...args: any[]) => {
@@ -255,7 +277,13 @@ export async function activate(context: vscode.ExtensionContext) {
     try {
       await fs.writeFile(target, '');
       // Open the new file in editor
-      await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(target));
+      const openFileMode = cfg.get<string>('openFileMode', 'preview');
+      if (openFileMode === 'preview') {
+        await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(target));
+      } else {
+        const document = await vscode.workspace.openTextDocument(vscode.Uri.file(target));
+        await vscode.window.showTextDocument(document, { preview: false });
+      }
       // Refresh provider so view updates
       try { await provider.refreshAll(); } catch (e) { provider.refresh(); }
     } catch (err) {
@@ -333,7 +361,14 @@ export async function activate(context: vscode.ExtensionContext) {
       // reopen if needed
       for (const ed of vscode.window.visibleTextEditors) {
         if (ed.document.uri.fsPath === oldPath) {
-          await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(newPath));
+          const cfg = vscode.workspace.getConfiguration('obsidianManager');
+          const openFileMode = cfg.get<string>('openFileMode', 'preview');
+          if (openFileMode === 'preview') {
+            await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(newPath));
+          } else {
+            const document = await vscode.workspace.openTextDocument(vscode.Uri.file(newPath));
+            await vscode.window.showTextDocument(document, { preview: false });
+          }
           break;
         }
       }
@@ -366,6 +401,47 @@ export async function activate(context: vscode.ExtensionContext) {
   const provider = new ObsidianTreeProvider(context);
   await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Preloading Obsidian vault...' }, async () => {
     await provider.ensurePreloaded();
+  });
+
+  // File system watcher to monitor vault changes
+  const cfg = vscode.workspace.getConfiguration('obsidianManager');
+  const vaultPath = cfg.get<string>('vault', '');
+  let fileWatcher: vscode.FileSystemWatcher | undefined;
+  
+  const setupFileWatcher = () => {
+    if (fileWatcher) {
+      fileWatcher.dispose();
+    }
+    
+    const currentVaultPath = vscode.workspace.getConfiguration('obsidianManager').get<string>('vault', '');
+    if (currentVaultPath) {
+      const pattern = new vscode.RelativePattern(currentVaultPath, '**/*.md');
+      fileWatcher = vscode.workspace.createFileSystemWatcher(pattern);
+      
+      // Refresh calendar when files are created, changed, or deleted
+      fileWatcher.onDidCreate(() => {
+        vscode.commands.executeCommand('obsidianManager.refreshCalendar');
+      });
+      
+      fileWatcher.onDidChange(() => {
+        vscode.commands.executeCommand('obsidianManager.refreshCalendar');
+      });
+      
+      fileWatcher.onDidDelete(() => {
+        vscode.commands.executeCommand('obsidianManager.refreshCalendar');
+      });
+      
+      context.subscriptions.push(fileWatcher);
+    }
+  };
+  
+  setupFileWatcher();
+  
+  // Re-setup watcher when vault configuration changes
+  vscode.workspace.onDidChangeConfiguration(e => {
+    if (e.affectsConfiguration('obsidianManager.vault')) {
+      setupFileWatcher();
+    }
   });
 
   const dndController = new ObsidianDragAndDropController(async () => { try { await provider.refreshAll(); } catch (e) { provider.refresh(); } });
@@ -423,6 +499,445 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   });
   context.subscriptions.push(actionsViewProvider);
+
+  // Create calendar webview
+  let currentCalendarView: vscode.WebviewView | undefined;
+  const calendarViewProvider = vscode.window.registerWebviewViewProvider('obsidianCalendar', {
+    resolveWebviewView(webviewView: vscode.WebviewView) {
+      currentCalendarView = webviewView;
+      webviewView.webview.options = { enableScripts: true };
+      
+      const updateCalendar = async (year: number, month: number, selectedFolder?: string) => {
+        const cfg = vscode.workspace.getConfiguration('obsidianManager');
+        const weekStartDay = cfg.get<string>('weekStartDay', 'monday');
+        const startOnMonday = weekStartDay === 'monday';
+        const vaultPath = cfg.get<string>('vault', '');
+        
+        const today = new Date();
+        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+        const startDate = new Date(firstDay);
+        
+        // Calculate start date based on week start preference
+        let dayOffset = firstDay.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+        if (startOnMonday) {
+          dayOffset = dayOffset === 0 ? 6 : dayOffset - 1; // Convert Sunday=0 to Sunday=6 for Monday start
+        }
+        startDate.setDate(startDate.getDate() - dayOffset);
+        
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+          'July', 'August', 'September', 'October', 'November', 'December'];
+        
+        // Day headers based on week start preference
+        const dayHeaders = startOnMonday 
+          ? ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
+          : ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+        
+        // Get all folders from vault
+        let folderOptions = '';
+        if (vaultPath) {
+          try {
+            const getTopLevelFolders = async (dirPath: string): Promise<string[]> => {
+              const folders: string[] = [];
+              try {
+                const entries = await fs.readdir(dirPath, { withFileTypes: true });
+                for (const entry of entries) {
+                  if (entry.isDirectory() && !entry.name.startsWith('.')) {
+                    folders.push(entry.name);
+                  }
+                }
+              } catch (e) {
+                // Ignore unreadable directories
+              }
+              return folders;
+            };
+            
+            const folders = await getTopLevelFolders(vaultPath);
+            folders.sort();
+            folderOptions = ['Root', ...folders].map(folder => 
+              `<option value="${folder}" ${folder === (selectedFolder || 'Root') ? 'selected' : ''}>${folder}</option>`
+            ).join('');
+          } catch (e) {
+            folderOptions = '<option value="Root">Root</option>';
+          }
+        }
+        
+        // Get files in selected folder to check which days have files (including subfolders)
+        const filesInFolder = new Set<string>();
+        const filePathsMap = new Map<string, string[]>(); // Map date to array of full file paths
+        if (vaultPath && selectedFolder) {
+          const scanFolderRecursively = async (dirPath: string): Promise<void> => {
+            try {
+              const entries = await fs.readdir(dirPath, { withFileTypes: true });
+              for (const entry of entries) {
+                if (entry.isFile() && entry.name.endsWith('.md')) {
+                  const dateMatch = entry.name.match(/^(\d{4}-\d{2}-\d{2})/);
+                  if (dateMatch) {
+                    const dateStr = dateMatch[1];
+                    filesInFolder.add(dateStr);
+                    // Store the full paths for this date (support multiple files)
+                    if (!filePathsMap.has(dateStr)) {
+                      filePathsMap.set(dateStr, []);
+                    }
+                    filePathsMap.get(dateStr)!.push(path.join(dirPath, entry.name));
+                  }
+                } else if (entry.isDirectory() && !entry.name.startsWith('.')) {
+                  await scanFolderRecursively(path.join(dirPath, entry.name));
+                }
+              }
+            } catch (e) {
+              // Ignore errors
+            }
+          };
+          
+          try {
+            const folderPath = selectedFolder === 'Root' ? vaultPath : path.join(vaultPath, selectedFolder);
+            await scanFolderRecursively(folderPath);
+          } catch (e) {
+            // Ignore errors
+          }
+        }
+        
+        let calendarHtml = `
+          <div class="folder-selector">
+            <select onchange="folderChanged(this.value)">
+              ${folderOptions}
+            </select>
+          </div>
+          <div class="calendar-header">
+            <button onclick="previousMonth()">&lt;</button>
+            <span class="month-year">${monthNames[month]} ${year}</span>
+            <button onclick="nextMonth()">&gt;</button>
+          </div>
+          <div class="calendar-grid">
+            ${dayHeaders.map(day => `<div class="day-header">${day}</div>`).join('')}`;
+        
+        const currentDate = new Date(startDate);
+        for (let week = 0; week < 6; week++) {
+          for (let day = 0; day < 7; day++) {
+            const dateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+            const isCurrentMonth = currentDate.getMonth() === month;
+            const isToday = dateStr === todayStr;
+            const hasFile = filesInFolder.has(dateStr);
+            
+            const classes = [
+              'day',
+              isCurrentMonth ? 'current-month' : 'other-month',
+              isToday ? 'today' : '',
+              hasFile ? 'has-file' : ''
+            ].filter(Boolean).join(' ');
+            
+            calendarHtml += `<div class="${classes}" onclick="dayClicked('${dateStr}')">${currentDate.getDate()}</div>`;
+            
+            currentDate.setDate(currentDate.getDate() + 1);
+          }
+        }
+        
+        calendarHtml += '</div>';
+        
+        // Send updated file paths map to webview
+        webviewView.webview.postMessage({
+          command: 'updateFilePathsMap',
+          filePathsMap: Object.fromEntries(filePathsMap)
+        });
+
+        webviewView.webview.html = `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: var(--vscode-font-family);
+            padding: 8px;
+            margin: 0;
+            font-size: 11px;
+        }
+        .folder-selector {
+            margin-bottom: 8px;
+        }
+        .folder-selector select {
+            width: 100%;
+            padding: 4px 8px;
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border);
+            border-radius: 2px;
+            font-size: 11px;
+        }
+        .calendar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .calendar-header button {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            padding: 4px 8px;
+            cursor: pointer;
+            border-radius: 2px;
+        }
+        .calendar-header button:hover {
+            background: var(--vscode-button-hoverBackground);
+        }
+        .month-year {
+            font-weight: bold;
+            font-size: 12px;
+        }
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 1px;
+        }
+        .day-header {
+            text-align: center;
+            font-weight: bold;
+            padding: 4px;
+            font-size: 10px;
+            color: var(--vscode-descriptionForeground);
+        }
+        .day {
+            text-align: center;
+            padding: 4px 2px;
+            cursor: pointer;
+            border-radius: 2px;
+            min-height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .day:hover {
+            background: var(--vscode-list-hoverBackground);
+        }
+        .day.current-month {
+            color: var(--vscode-foreground);
+        }
+        .day.other-month {
+            color: var(--vscode-descriptionForeground);
+            opacity: 0.6;
+        }
+        .day.today {
+            background: var(--vscode-focusBorder);
+            color: var(--vscode-editor-background);
+            font-weight: bold;
+            border: 1px solid var(--vscode-focusBorder);
+        }
+        .day.has-file {
+            background: var(--vscode-sideBarSectionHeader-foreground);
+            color: var(--vscode-button-foreground);
+            font-weight: bold;
+        }
+        .day.has-file:hover {
+            background: var(--vscode-charts-blue);
+        }
+        .day.today.has-file {
+            background: var(--vscode-focusBorder);
+            color: var(--vscode-editor-background);
+            border: 1px solid var(--vscode-focusBorder);
+        }
+    </style>
+</head>
+<body>
+    ${calendarHtml}
+    <script>
+        const vscode = acquireVsCodeApi();
+        let currentYear = ${year};
+        let currentMonth = ${month};
+        let selectedFolder = '${selectedFolder || 'Root'}';
+        let filePathsMap = ${JSON.stringify(Object.fromEntries(filePathsMap))};
+        
+        function previousMonth() {
+            if (currentMonth === 0) {
+                currentMonth = 11;
+                currentYear--;
+            } else {
+                currentMonth--;
+            }
+            vscode.postMessage({ 
+                command: 'updateCalendar', 
+                year: currentYear, 
+                month: currentMonth, 
+                folder: selectedFolder 
+            });
+        }
+        
+        function nextMonth() {
+            if (currentMonth === 11) {
+                currentMonth = 0;
+                currentYear++;
+            } else {
+                currentMonth++;
+            }
+            vscode.postMessage({ 
+                command: 'updateCalendar', 
+                year: currentYear, 
+                month: currentMonth, 
+                folder: selectedFolder 
+            });
+        }
+        
+        function folderChanged(folder) {
+            selectedFolder = folder;
+            vscode.postMessage({ 
+                command: 'updateCalendar', 
+                year: currentYear, 
+                month: currentMonth, 
+                folder: selectedFolder 
+            });
+        }
+        
+        function updateFilePathsMap(newMap) {
+            filePathsMap = newMap;
+        }
+        
+        // Listen for messages from extension
+        window.addEventListener('message', event => {
+            const message = event.data;
+            if (message.command === 'updateFilePathsMap') {
+                updateFilePathsMap(message.filePathsMap);
+            } else if (message.command === 'refreshCalendar') {
+                // Refresh calendar maintaining current selected folder
+                vscode.postMessage({ 
+                    command: 'updateCalendar', 
+                    year: currentYear, 
+                    month: currentMonth, 
+                    folder: selectedFolder 
+                });
+            }
+        });
+        
+        function dayClicked(dateStr) {
+            const existingFilePaths = filePathsMap[dateStr];
+            vscode.postMessage({ 
+                command: 'dayClicked', 
+                date: dateStr, 
+                folder: selectedFolder,
+                existingFilePaths: existingFilePaths 
+            });
+        }
+    </script>
+</body>
+</html>`;
+      };
+
+      // Initialize with current month
+      const now = new Date();
+      updateCalendar(now.getFullYear(), now.getMonth(), 'Root');
+
+      webviewView.webview.onDidReceiveMessage(async message => {
+        if (message.command === 'updateCalendar') {
+          await updateCalendar(message.year, message.month, message.folder);
+        } else if (message.command === 'dayClicked') {
+          const cfg = vscode.workspace.getConfiguration('obsidianManager');
+          const vaultPath = cfg.get<string>('vault', '');
+          
+          if (!vaultPath) {
+            vscode.window.showWarningMessage('Vault path not configured');
+            return;
+          }
+          
+          // Check if we have existing file paths from the scan
+          const existingFilePaths = message.existingFilePaths;
+          
+          if (existingFilePaths && existingFilePaths.length > 0) {
+            let selectedFilePath: string;
+            
+            if (existingFilePaths.length === 1) {
+              // Only one file, open it directly
+              selectedFilePath = existingFilePaths[0];
+            } else {
+              // Multiple files, show quick pick dialog
+              const quickPickItems: vscode.QuickPickItem[] = existingFilePaths.map((filePath: string) => ({
+                label: path.basename(filePath),
+                description: path.relative(vaultPath, path.dirname(filePath)),
+                detail: filePath
+              }));
+              
+              const selectedItem = await vscode.window.showQuickPick(quickPickItems, {
+                placeHolder: `Select which file to open for ${message.date}...`,
+                matchOnDescription: true
+              });
+              
+              if (!selectedItem) {
+                return; // User cancelled
+              }
+              
+              selectedFilePath = selectedItem.detail!;
+            }
+            
+            // Open the selected file
+            const openFileMode = cfg.get<string>('openFileMode', 'preview');
+            if (openFileMode === 'preview') {
+              await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(selectedFilePath));
+            } else {
+              const document = await vscode.workspace.openTextDocument(vscode.Uri.file(selectedFilePath));
+              await vscode.window.showTextDocument(document, { preview: false });
+            }
+          } else {
+            // File doesn't exist, create it in the selected folder
+            const currentFolder = message.folder || 'Root';
+            const folderPath = currentFolder === 'Root' ? vaultPath : path.join(vaultPath, currentFolder);
+            const fileName = `${message.date}.md`;
+            const filePath = path.join(folderPath, fileName);
+            // File doesn't exist, ask user if they want to create it
+            const folderDisplayName = currentFolder === 'Root' ? 'root folder' : `folder "${currentFolder}"`;
+            const createFile = await vscode.window.showInformationMessage(
+              `File "${fileName}" does not exist in ${folderDisplayName}. Do you want to create it?`,
+              'Yes', 'No'
+            );
+            
+            if (createFile === 'Yes') {
+              try {
+                // Ensure folder exists
+                await fs.mkdir(folderPath, { recursive: true });
+                
+                // Create file with basic daily note template
+                const content = `# ${message.date}\n\n`;
+                await fs.writeFile(filePath, content, 'utf8');
+                
+                // Open the newly created file
+                const openFileMode = cfg.get<string>('openFileMode', 'preview');
+                if (openFileMode === 'preview') {
+                  await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(filePath));
+                } else {
+                  const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
+                  await vscode.window.showTextDocument(document, { preview: false });
+                }
+                
+                // Refresh the tree view to show the new file
+                vscode.commands.executeCommand('obsidianManager.refreshView');
+                
+                // Update calendar to reflect the new file
+                const dateObj = new Date(message.date);
+                updateCalendar(dateObj.getFullYear(), dateObj.getMonth(), currentFolder);
+                
+              } catch (createError) {
+                vscode.window.showErrorMessage(`Failed to create file: ${String(createError)}`);
+              }
+            }
+          }
+        }
+      });
+    }
+  });
+  context.subscriptions.push(calendarViewProvider);
+
+  // Command to refresh calendar
+  const refreshCalendarCmd = vscode.commands.registerCommand('obsidianManager.refreshCalendar', () => {
+    if (currentCalendarView) {
+      // Refresh calendar with current view state
+      const now = new Date();
+      currentCalendarView.webview.postMessage({
+        command: 'refreshCalendar',
+        year: now.getFullYear(),
+        month: now.getMonth()
+      });
+    }
+  });
+  context.subscriptions.push(refreshCalendarCmd);
 
 
 
@@ -787,7 +1302,14 @@ export async function activate(context: vscode.ExtensionContext) {
       await fs.copyFile(originalPath, targetPath);
       
       // Open the duplicated file in editor
-      await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(targetPath));
+      const cfg = vscode.workspace.getConfiguration('obsidianManager');
+      const openFileMode = cfg.get<string>('openFileMode', 'preview');
+      if (openFileMode === 'preview') {
+        await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(targetPath));
+      } else {
+        const document = await vscode.workspace.openTextDocument(vscode.Uri.file(targetPath));
+        await vscode.window.showTextDocument(document, { preview: false });
+      }
       
       // Refresh the tree view
       try { await provider.refreshAll(); } catch (e) { provider.refresh(); }
@@ -837,7 +1359,13 @@ export async function activate(context: vscode.ExtensionContext) {
       try {
         await fs.access(targetPath);
         // File exists, open it instead of creating
-        await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(targetPath));
+        const openFileMode = cfg.get<string>('openFileMode', 'preview');
+        if (openFileMode === 'preview') {
+          await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(targetPath));
+        } else {
+          const document = await vscode.workspace.openTextDocument(vscode.Uri.file(targetPath));
+          await vscode.window.showTextDocument(document, { preview: false });
+        }
         vscode.window.showInformationMessage(`Today's note already exists: ${fileName}`);
         return;
       } catch (e) {
@@ -849,7 +1377,13 @@ export async function activate(context: vscode.ExtensionContext) {
       await fs.writeFile(targetPath, content);
       
       // Open the new file in editor
-      await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(targetPath));
+      const openFileMode = cfg.get<string>('openFileMode', 'preview');
+      if (openFileMode === 'preview') {
+        await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(targetPath));
+      } else {
+        const document = await vscode.workspace.openTextDocument(vscode.Uri.file(targetPath));
+        await vscode.window.showTextDocument(document, { preview: false });
+      }
       
       // Refresh provider so view updates
       try { await provider.refreshAll(); } catch (e) { provider.refresh(); }
@@ -892,7 +1426,13 @@ export async function activate(context: vscode.ExtensionContext) {
       await fs.writeFile(target, '');
       
       // Open the new file in editor
-      await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(target));
+      const openFileMode = cfg.get<string>('openFileMode', 'preview');
+      if (openFileMode === 'preview') {
+        await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(target));
+      } else {
+        const document = await vscode.workspace.openTextDocument(vscode.Uri.file(target));
+        await vscode.window.showTextDocument(document, { preview: false });
+      }
       
       // Refresh provider so view updates
       try { await provider.refreshAll(); } catch (e) { provider.refresh(); }
@@ -1022,7 +1562,13 @@ export async function activate(context: vscode.ExtensionContext) {
         progress.report({ message: 'Opening file...', increment: 100 });
         
         // Open the new file in editor
-        await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(targetPath));
+        const openFileMode = cfg.get<string>('openFileMode', 'preview');
+        if (openFileMode === 'preview') {
+          await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(targetPath));
+        } else {
+          const document = await vscode.workspace.openTextDocument(vscode.Uri.file(targetPath));
+          await vscode.window.showTextDocument(document, { preview: false });
+        }
         
         // Refresh provider so view updates
         try { await provider.refreshAll(); } catch (e) { provider.refresh(); }

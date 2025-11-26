@@ -54,9 +54,9 @@ export class ObsidianTreeProvider implements vscode.TreeDataProvider<ObsidianNod
         treeItem.iconPath = new vscode.ThemeIcon('symbol-folder');
       }
     } else {
-      // Open with the workspace's default editor (vscode.open)
+      // Open with custom command that respects openFileMode setting
       treeItem.command = {
-        command: 'vscode.open',
+        command: 'obsidianManager.openFileWithMode',
         title: 'Open',
         arguments: [element.resourceUri]
       };
