@@ -742,10 +742,73 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   context.subscriptions.push(duplicateCmd);
 
+  // Command to create today's note
+  const createTodayCmd = vscode.commands.registerCommand('obsidianManager.createTodayNote', async (...args: any[]) => {
+    // Determine folder Uri from args or active selection
+    let folderUri: vscode.Uri | undefined;
+    const first = args && args[0];
+    if (first instanceof vscode.Uri) folderUri = first;
+    else if (first && typeof first === 'object') {
+      if ((first as any).resourceUri instanceof vscode.Uri) folderUri = (first as any).resourceUri;
+      else if ((first as any).uri instanceof vscode.Uri) folderUri = (first as any).uri;
+    }
+
+    if (!folderUri && vscode.window.activeTextEditor) {
+      folderUri = vscode.window.activeTextEditor.document.uri;
+    }
+
+    if (!folderUri) {
+      vscode.window.showErrorMessage('No folder selected to create today\'s note.');
+      return;
+    }
+
+    const cfg = vscode.workspace.getConfiguration('obsidianManager');
+    const configuredVault = ((cfg.get<string>('vault') || '')).trim();
+    const folderFs = folderUri.fsPath;
+
+    // Generate today's date in YYYY-MM-DD format
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const todayString = `${year}-${month}-${day}`;
+    
+    const fileName = `${todayString}.md`;
+    const targetPath = path.join(folderFs, fileName);
+    
+    try {
+      // Check if file already exists
+      try {
+        await fs.access(targetPath);
+        // File exists, open it instead of creating
+        await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(targetPath));
+        vscode.window.showInformationMessage(`Today's note already exists: ${fileName}`);
+        return;
+      } catch (e) {
+        // File doesn't exist, proceed to create it
+      }
+      
+      // Create file content with H1 header
+      const content = `# ${todayString}\n\n`;
+      await fs.writeFile(targetPath, content);
+      
+      // Open the new file in editor
+      await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(targetPath));
+      
+      // Refresh provider so view updates
+      try { await provider.refreshAll(); } catch (e) { provider.refresh(); }
+      
+    } catch (err) {
+      vscode.window.showErrorMessage(`Unable to create today's note: ${String(err)}`);
+    }
+  });
+  context.subscriptions.push(createTodayCmd);
+
   // Register context menu aliases (without numbers) that call the original commands
   const contextAliases = [
     { alias: 'obsidianManager.openFileFromView.context', original: 'obsidianManager.openFileFromView' },
     { alias: 'obsidianManager.createFileInFolder.context', original: 'obsidianManager.createFileInFolder' },
+    { alias: 'obsidianManager.createTodayNote.context', original: 'obsidianManager.createTodayNote' },
     { alias: 'obsidianManager.createFolder.context', original: 'obsidianManager.createFolder' },
     { alias: 'obsidianManager.renameItem.context', original: 'obsidianManager.renameItem' },
     { alias: 'obsidianManager.deleteItem.context', original: 'obsidianManager.deleteItem' },

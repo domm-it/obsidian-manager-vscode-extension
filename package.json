@@ -88,20 +88,26 @@
 				"icon": "$(new-file)"
 			},
 			{
+				"command": "obsidianManager.createTodayNote",
+				"title": "2 - Create today",
+				"category": "Obsidian manager",
+				"icon": "$(calendar)"
+			},
+			{
 				"command": "obsidianManager.renameItem",
-				"title": "2 - Rename",
+				"title": "3 - Rename",
 				"category": "Obsidian manager",
 				"icon": "$(edit)"
 			},
 			{
 				"command": "obsidianManager.duplicateItem",
-				"title": "3 - Duplicate",
+				"title": "4 - Duplicate",
 				"category": "Obsidian manager",
 				"icon": "$(copy)"
 			},
 			{
 				"command": "obsidianManager.deleteItem",
-				"title": "4 - Delete",
+				"title": "5 - Delete",
 				"category": "Obsidian manager",
 				"icon": "$(trash)"
 			},
@@ -154,6 +160,12 @@
 				"icon": "$(new-file)"
 			},
 			{
+				"command": "obsidianManager.createTodayNote.context",
+				"title": "Create today",
+				"category": "Obsidian manager",
+				"icon": "$(calendar)"
+			},
+			{
 				"command": "obsidianManager.createFolder.context",
 				"title": "New folder",
 				"category": "Obsidian manager",
@@ -203,6 +215,11 @@
 					"group": "inline"
 				},
 				{
+					"command": "obsidianManager.createTodayNote",
+					"when": "view == obsidianFiles && viewItem == obsidianFolder",
+					"group": "inline"
+				},
+				{
 					"command": "obsidianManager.createFolder",
 					"when": "view == obsidianFiles && viewItem == obsidianFolder",
 					"group": "inline"
@@ -229,6 +246,11 @@
 				},
 				{
 					"command": "obsidianManager.createFileInFolder.context",
+					"when": "view == obsidianFiles && viewItem == obsidianFolder",
+					"group": "2_create"
+				},
+				{
+					"command": "obsidianManager.createTodayNote.context",
 					"when": "view == obsidianFiles && viewItem == obsidianFolder",
 					"group": "2_create"
 				},
