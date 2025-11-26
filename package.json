@@ -188,6 +188,12 @@
 				"title": "Delete",
 				"category": "Obsidian manager",
 				"icon": "$(trash)"
+			},
+			{
+				"command": "obsidianManager.createFileInRoot",
+				"title": "New note in root",
+				"category": "Obsidian manager",
+				"icon": "$(new-file)"
 			}
 		],
 		"menus": {
@@ -317,6 +323,11 @@
 				},
 				{
 					"command": "obsidianManager.createFolder",
+					"when": "view == obsidianFiles",
+					"group": "navigation"
+				},
+				{
+					"command": "obsidianManager.createFileInRoot",
 					"when": "view == obsidianFiles",
 					"group": "navigation"
 				},

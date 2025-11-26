@@ -804,6 +804,49 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   context.subscriptions.push(createTodayCmd);
 
+  // Command to create a new file in vault root
+  const createFileInRootCmd = vscode.commands.registerCommand('obsidianManager.createFileInRoot', async () => {
+    const cfg = vscode.workspace.getConfiguration('obsidianManager');
+    const configuredVault = ((cfg.get<string>('vault') || '')).trim();
+    if (!configuredVault) {
+      vscode.window.showErrorMessage('Please configure the `obsidianManager.vault` setting with the vault path first.');
+      return;
+    }
+
+    // Prompt for filename
+    const name = await vscode.window.showInputBox({ 
+      prompt: 'New note name (without extension)', 
+      placeHolder: 'my-note' 
+    });
+    if (!name) return;
+    
+    const fileName = name.endsWith('.md') ? name : `${name}.md`;
+    const target = path.join(configuredVault, fileName);
+    
+    try {
+      // Check if file already exists
+      try {
+        await fs.access(target);
+        vscode.window.showErrorMessage(`A file with the name "${fileName}" already exists in the vault root.`);
+        return;
+      } catch (e) {
+        // File doesn't exist, proceed to create it
+      }
+      
+      await fs.writeFile(target, '');
+      
+      // Open the new file in editor
+      await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(target));
+      
+      // Refresh provider so view updates
+      try { await provider.refreshAll(); } catch (e) { provider.refresh(); }
+      
+    } catch (err) {
+      vscode.window.showErrorMessage(`Unable to create file: ${String(err)}`);
+    }
+  });
+  context.subscriptions.push(createFileInRootCmd);
+
   // Register context menu aliases (without numbers) that call the original commands
   const contextAliases = [
     { alias: 'obsidianManager.openFileFromView.context', original: 'obsidianManager.openFileFromView' },
