@@ -593,6 +593,48 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   });
   context.subscriptions.push(linkDocumentCmd);
+
+  // Command to include clipboard content in a code block
+  const includeClipboardCodeBlockCmd = vscode.commands.registerCommand('obsidianManager.includeClipboardCodeBlock', async () => {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      vscode.window.showErrorMessage('No active editor found.');
+      return;
+    }
+
+    // Check if current file is markdown
+    if (!editor.document.fileName.endsWith('.md')) {
+      vscode.window.showErrorMessage('Include clipboard in code block command is only available for Markdown files.');
+      return;
+    }
+
+    try {
+      // Read clipboard content
+      const clipboardContent = await vscode.env.clipboard.readText();
+      
+      if (!clipboardContent) {
+        vscode.window.showWarningMessage('Clipboard is empty.');
+        return;
+      }
+
+      // Format as code block
+      const codeBlock = `\`\`\`\n${clipboardContent}\n\`\`\``;
+      
+      // Insert at current cursor position
+      const selection = editor.selection;
+      await editor.edit(editBuilder => {
+        editBuilder.insert(selection.active, codeBlock);
+      });
+
+      // Move cursor to after the code block
+      const newPosition = selection.active.translate(codeBlock.split('\n').length, 0);
+      editor.selection = new vscode.Selection(newPosition, newPosition);
+
+    } catch (err) {
+      vscode.window.showErrorMessage(`Error including clipboard content: ${String(err)}`);
+    }
+  });
+  context.subscriptions.push(includeClipboardCodeBlockCmd);
 }
 
 export function deactivate() {}

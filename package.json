@@ -123,6 +123,12 @@
 				"title": "Obsidian > Link to Document",
 				"category": "Obsidian manager",
 				"icon": "$(link)"
+			},
+			{
+				"command": "obsidianManager.includeClipboardCodeBlock",
+				"title": "Obsidian > Include clipboard in Code Block",
+				"category": "Obsidian manager",
+				"icon": "$(clippy)"
 			}
 		],
 		"menus": {
@@ -168,6 +174,11 @@
 			"editor/context": [
 				{
 					"command": "obsidianManager.linkDocument",
+					"when": "resourceExtname == .md || editorLangId == markdown",
+					"group": "obsidian"
+				},
+				{
+					"command": "obsidianManager.includeClipboardCodeBlock",
 					"when": "resourceExtname == .md || editorLangId == markdown",
 					"group": "obsidian"
 				}
@@ -243,6 +254,12 @@
 				"command": "obsidianManager.linkDocument",
 				"key": "ctrl+shift+l",
 				"mac": "cmd+shift+l",
+				"when": "editorTextFocus && resourceExtname == .md"
+			},
+			{
+				"command": "obsidianManager.includeClipboardCodeBlock",
+				"key": "ctrl+shift+v",
+				"mac": "cmd+shift+v",
 				"when": "editorTextFocus && resourceExtname == .md"
 			}
 		],
