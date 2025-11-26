@@ -172,6 +172,12 @@
 				"icon": "$(calendar)"
 			},
 			{
+				"command": "obsidianManager.createTodayFileInFolder",
+				"title": "Create today file in folder",
+				"category": "Obsidian manager",
+				"icon": "$(new-file)"
+			},
+			{
 				"command": "obsidianManager.createFolder.context",
 				"title": "New folder",
 				"category": "Obsidian manager",
@@ -265,17 +271,22 @@
 				{
 					"command": "obsidianManager.createFileInFolder.context",
 					"when": "view == obsidianFiles && viewItem == obsidianFolder",
-					"group": "2_create"
-				},
-				{
-					"command": "obsidianManager.createTodayNote.context",
-					"when": "view == obsidianFiles && viewItem == obsidianFolder",
-					"group": "2_create"
+					"group": "1_create"
 				},
 				{
 					"command": "obsidianManager.createFolder.context",
 					"when": "view == obsidianFiles && viewItem == obsidianFolder",
 					"group": "2_create"
+				},
+				{
+					"command": "obsidianManager.createTodayFileInFolder",
+					"when": "view == obsidianFiles && viewItem == obsidianFolder",
+					"group": "3_today"
+				},
+				{
+					"command": "obsidianManager.createTodayNote.context",
+					"when": "view == obsidianFiles && viewItem == obsidianFolder",
+					"group": "3_today"
 				},
 				{
 					"command": "obsidianManager.renameItem.context",

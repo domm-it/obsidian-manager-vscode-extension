@@ -269,8 +269,19 @@ export async function activate(context: vscode.ExtensionContext) {
     const configuredVault = ((cfg.get<string>('vault') || '')).trim();
     const folderFs = folderUri.fsPath;
 
+    // Generate today's date in YYYY-MM-DD format as default
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const todayString = `${year}-${month}-${day}`;
+
     // Prompt for filename
-    const name = await vscode.window.showInputBox({ prompt: 'New note name (without extension)', placeHolder: 'my-note' });
+    const name = await vscode.window.showInputBox({ 
+      prompt: 'New note name (without extension)', 
+      value: todayString,
+      placeHolder: 'YYYY-MM-DD'
+    });
     if (!name) return;
     const fileName = name.endsWith('.md') ? name : `${name}.md`;
     const target = path.join(folderFs, fileName);
@@ -1591,6 +1602,97 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   });
   context.subscriptions.push(createTodayInRootCmd);
+
+  // Command to create today's file in a specific folder with customizable name
+  const createTodayFileInFolderCmd = vscode.commands.registerCommand('obsidianManager.createTodayFileInFolder', async (...args: any[]) => {
+    // Determine folder Uri from args or active selection
+    let folderUri: vscode.Uri | undefined;
+    const first = args && args[0];
+    if (first instanceof vscode.Uri) folderUri = first;
+    else if (first && typeof first === 'object') {
+      if ((first as any).resourceUri instanceof vscode.Uri) folderUri = (first as any).resourceUri;
+      else if ((first as any).uri instanceof vscode.Uri) folderUri = (first as any).uri;
+    }
+
+    if (!folderUri && vscode.window.activeTextEditor) {
+      folderUri = vscode.window.activeTextEditor.document.uri;
+    }
+
+    if (!folderUri) {
+      vscode.window.showErrorMessage('No folder selected to create today\'s file.');
+      return;
+    }
+
+    const cfg = vscode.workspace.getConfiguration('obsidianManager');
+    const configuredVault = ((cfg.get<string>('vault') || '')).trim();
+    const folderFs = folderUri.fsPath;
+
+    // Generate today's date in YYYY-MM-DD format
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const todayString = `${year}-${month}-${day}`;
+    
+    // Show input dialog with default today's date as filename
+    const fileName = await vscode.window.showInputBox({
+      prompt: 'Enter filename for today\'s file (without .md extension)',
+      value: todayString,
+      placeHolder: 'YYYY-MM-DD',
+      validateInput: (input) => {
+        if (!input || input.trim() === '') {
+          return 'Filename cannot be empty';
+        }
+        // Check for invalid characters
+        if (/[<>:"/\\|?*]/.test(input)) {
+          return 'Filename contains invalid characters';
+        }
+        return null;
+      }
+    });
+    
+    if (!fileName) {
+      // User pressed Esc or cancelled - don't create file
+      return;
+    }
+    
+    const fullFileName = `${fileName.trim()}.md`;
+    const targetPath = path.join(folderFs, fullFileName);
+    
+    try {
+      // Check if file already exists
+      try {
+        await fs.access(targetPath);
+        const choice = await vscode.window.showQuickPick(['Overwrite', 'Cancel'], { 
+          placeHolder: `File "${fullFileName}" already exists. What would you like to do?` 
+        });
+        if (!choice || choice === 'Cancel') return;
+        // If overwrite, continue with file creation
+      } catch (e) {
+        // File doesn't exist, proceed to create it
+      }
+      
+      // Create file with basic content
+      const content = `# ${fileName.trim()}\n\n`;
+      await fs.writeFile(targetPath, content);
+      
+      // Open the new file in editor
+      const openFileMode = cfg.get<string>('openFileMode', 'preview');
+      if (openFileMode === 'preview') {
+        await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(targetPath));
+      } else {
+        const document = await vscode.workspace.openTextDocument(vscode.Uri.file(targetPath));
+        await vscode.window.showTextDocument(document, { preview: false });
+      }
+      
+      // Refresh provider so view updates
+      try { await provider.refreshAll(); } catch (e) { provider.refresh(); }
+      
+    } catch (err) {
+      vscode.window.showErrorMessage(`Unable to create today's file: ${String(err)}`);
+    }
+  });
+  context.subscriptions.push(createTodayFileInFolderCmd);
 
   // Register context menu aliases (without numbers) that call the original commands
   const contextAliases = [
