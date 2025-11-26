@@ -1510,7 +1510,7 @@ export async function activate(context: vscode.ExtensionContext) {
     const day = String(today.getDate()).padStart(2, '0');
     const todayString = `${year}-${month}-${day}`;
     
-    const fileName = `${todayString}.md`;
+    const fileName = `${todayString}-Recap.md`;
     const targetPath = path.join(configuredVault, fileName);
     
     try {
