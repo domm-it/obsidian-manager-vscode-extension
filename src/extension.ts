@@ -900,25 +900,38 @@ export async function activate(context: vscode.ExtensionContext) {
               await vscode.window.showTextDocument(document, { preview: false });
             }
           } else {
-            // File doesn't exist, create it in the selected folder
+            // File doesn't exist, prompt for filename
             const currentFolder = message.folder || 'Root';
             const folderPath = currentFolder === 'Root' ? vaultPath : path.join(vaultPath, currentFolder);
-            const fileName = `${message.date}.md`;
-            const filePath = path.join(folderPath, fileName);
-            // File doesn't exist, ask user if they want to create it
-            const folderDisplayName = currentFolder === 'Root' ? 'root folder' : `folder "${currentFolder}"`;
-            const createFile = await vscode.window.showInformationMessage(
-              `File "${fileName}" does not exist in ${folderDisplayName}. Do you want to create it?`,
-              'Yes', 'No'
-            );
+            const defaultFileName = message.date; // YYYY-MM-DD format
             
-            if (createFile === 'Yes') {
+            // Show input box for filename (without .md extension)
+            const fileName = await vscode.window.showInputBox({
+              prompt: `Create new file in ${currentFolder === 'Root' ? 'root folder' : `folder "${currentFolder}"`}`,
+              value: defaultFileName,
+              placeHolder: 'Enter filename (without .md extension)',
+              validateInput: (value) => {
+                if (!value || value.trim() === '') {
+                  return 'Filename cannot be empty';
+                }
+                // Check for invalid characters
+                if (/[<>:"/\\|?*]/.test(value)) {
+                  return 'Filename contains invalid characters';
+                }
+                return null;
+              }
+            });
+            
+            if (fileName) {
               try {
                 // Ensure folder exists
                 await fs.mkdir(folderPath, { recursive: true });
                 
+                const fullFileName = `${fileName.trim()}.md`;
+                const filePath = path.join(folderPath, fullFileName);
+                
                 // Create file with basic daily note template
-                const content = `# ${message.date}\n\n`;
+                const content = `# ${fileName.trim()}\n\n`;
                 await fs.writeFile(filePath, content, 'utf8');
                 
                 // Open the newly created file
@@ -941,6 +954,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 vscode.window.showErrorMessage(`Failed to create file: ${String(createError)}`);
               }
             }
+            // If fileName is undefined (user pressed Esc), do nothing
           }
         }
       });
