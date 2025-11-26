@@ -563,12 +563,15 @@ export async function activate(context: vscode.ExtensionContext) {
         
         let calendarHtml = `
           <div class="top-controls">
-            <button class="action-button" onclick="createTodayRecap()" title="Create today recap">
-              📋
+            <button class="action-button" onclick="goToRoot()" title="Go to root folder">
+              🏠
             </button>
             <select class="folder-selector" onchange="folderChanged(this.value)">
               ${folderOptions}
             </select>
+            <button class="action-button" onclick="createTodayRecap()" title="Create today recap">
+              📋
+            </button>
           </div>
           <div class="calendar-header">
             <button onclick="previousMonth()">&lt;</button>
@@ -833,6 +836,14 @@ export async function activate(context: vscode.ExtensionContext) {
                 }
             }
         });
+        
+        function goToRoot() {
+            const folderSelect = document.querySelector('.folder-selector');
+            if (folderSelect) {
+                folderSelect.value = 'Root';
+                folderChanged('Root');
+            }
+        }
         
         function createTodayRecap() {
             vscode.postMessage({ command: 'createTodayInRoot' });
