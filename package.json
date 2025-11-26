@@ -94,8 +94,14 @@
 				"icon": "$(edit)"
 			},
 			{
+				"command": "obsidianManager.duplicateItem",
+				"title": "3 - Duplicate",
+				"category": "Obsidian manager",
+				"icon": "$(copy)"
+			},
+			{
 				"command": "obsidianManager.deleteItem",
-				"title": "3 - Delete",
+				"title": "4 - Delete",
 				"category": "Obsidian manager",
 				"icon": "$(trash)"
 			},
@@ -160,6 +166,12 @@
 				"icon": "$(edit)"
 			},
 			{
+				"command": "obsidianManager.duplicateItem.context",
+				"title": "Duplicate",
+				"category": "Obsidian manager",
+				"icon": "$(copy)"
+			},
+			{
 				"command": "obsidianManager.deleteItem.context",
 				"title": "Delete",
 				"category": "Obsidian manager",
@@ -201,6 +213,11 @@
 					"group": "inline"
 				},
 				{
+					"command": "obsidianManager.duplicateItem",
+					"when": "view == obsidianFiles && viewItem == obsidianFile",
+					"group": "inline"
+				},
+				{
 					"command": "obsidianManager.deleteItem",
 					"when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
 					"group": "inline"
@@ -226,9 +243,14 @@
 					"group": "3_modify"
 				},
 				{
+					"command": "obsidianManager.duplicateItem.context",
+					"when": "view == obsidianFiles && viewItem == obsidianFile",
+					"group": "4_duplicate"
+				},
+				{
 					"command": "obsidianManager.deleteItem.context",
 					"when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
-					"group": "4_delete"
+					"group": "5_delete"
 				}
 			],
 			"editor/context": [

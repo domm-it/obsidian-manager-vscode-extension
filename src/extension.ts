@@ -683,13 +683,73 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   context.subscriptions.push(putInsideCodeblockCmd);
 
+  // Command to duplicate a file
+  const duplicateCmd = vscode.commands.registerCommand('obsidianManager.duplicateItem', async (...args: any[]) => {
+    const first = args && args[0];
+    let node = undefined as any;
+    if (first instanceof vscode.Uri) node = { resourceUri: first, isDirectory: false };
+    else if (first && typeof first === 'object') node = first;
+    
+    if (!node || node.isDirectory) { 
+      vscode.window.showErrorMessage('Duplicate command is only available for files'); 
+      return; 
+    }
+
+    const originalPath = node.resourceUri.fsPath;
+    const originalDir = path.dirname(originalPath);
+    const originalExt = path.extname(originalPath);
+    const originalBaseName = path.basename(originalPath, originalExt);
+    
+    // Default new name with (copy) suffix
+    const defaultNewName = `${originalBaseName} (copy)${originalExt}`;
+    
+    // Show input dialog with default name
+    const newName = await vscode.window.showInputBox({ 
+      prompt: 'Enter name for duplicated file', 
+      value: defaultNewName,
+      validateInput: (input) => {
+        if (!input || input.trim() === '') {
+          return 'File name cannot be empty';
+        }
+        // Check if file already exists
+        const targetPath = path.join(originalDir, input);
+        try {
+          require('fs').accessSync(targetPath);
+          return 'A file with this name already exists';
+        } catch (e) {
+          return null; // File doesn't exist, name is valid
+        }
+      }
+    });
+    
+    if (!newName) return; // User cancelled
+    
+    const targetPath = path.join(originalDir, newName);
+    
+    try {
+      // Copy the file
+      await fs.copyFile(originalPath, targetPath);
+      
+      // Open the duplicated file in editor
+      await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(targetPath));
+      
+      // Refresh the tree view
+      try { await provider.refreshAll(); } catch (e) { provider.refresh(); }
+      
+    } catch (err) {
+      vscode.window.showErrorMessage(`Failed to duplicate file: ${String(err)}`);
+    }
+  });
+  context.subscriptions.push(duplicateCmd);
+
   // Register context menu aliases (without numbers) that call the original commands
   const contextAliases = [
     { alias: 'obsidianManager.openFileFromView.context', original: 'obsidianManager.openFileFromView' },
     { alias: 'obsidianManager.createFileInFolder.context', original: 'obsidianManager.createFileInFolder' },
     { alias: 'obsidianManager.createFolder.context', original: 'obsidianManager.createFolder' },
     { alias: 'obsidianManager.renameItem.context', original: 'obsidianManager.renameItem' },
-    { alias: 'obsidianManager.deleteItem.context', original: 'obsidianManager.deleteItem' }
+    { alias: 'obsidianManager.deleteItem.context', original: 'obsidianManager.deleteItem' },
+    { alias: 'obsidianManager.duplicateItem.context', original: 'obsidianManager.duplicateItem' }
   ];
 
   for (const { alias, original } of contextAliases) {
