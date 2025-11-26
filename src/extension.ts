@@ -629,7 +629,20 @@ export async function activate(context: vscode.ExtensionContext) {
               hasFile ? 'has-file' : ''
             ].filter(Boolean).join(' ');
             
-            calendarHtml += `<div class="${classes}" onclick="dayClicked('${dateStr}')">${currentDate.getDate()}</div>`;
+            // Generate dots for each file found for this date
+            let dotsHtml = '';
+            const filesForDate = filePathsMap.get(dateStr);
+            if (filesForDate && filesForDate.length > 0) {
+              dotsHtml = filesForDate.map(filePath => {
+                const fileName = path.basename(filePath, '.md');
+                return `<span class="file-dot" title="${fileName}"></span>`;
+              }).join('');
+            }
+            
+            calendarHtml += `<div class="${classes}" onclick="dayClicked('${dateStr}')">
+              <span class="day-number">${currentDate.getDate()}</span>
+              <div class="file-dots">${dotsHtml}</div>
+            </div>`;
             
             currentDate.setDate(currentDate.getDate() + 1);
           }
@@ -708,6 +721,24 @@ export async function activate(context: vscode.ExtensionContext) {
             display: flex;
             align-items: center;
             justify-content: center;
+            position: relative;
+        }
+        .day-number {
+            font-size: 11px;
+        }
+        .file-dots {
+            position: absolute;
+            bottom: 1px;
+            justify-content: center;
+            display: flex;
+            gap: 1px;
+        }
+        .file-dot {
+            width: 4px;
+            height: 2px;
+            border-radius: 2px;
+            background: white;
+            display: inline-block;
         }
         .day:hover {
             background: var(--vscode-list-hoverBackground);
@@ -721,12 +752,15 @@ export async function activate(context: vscode.ExtensionContext) {
         }
         .day.today {
             background: var(--vscode-focusBorder);
+        }
+        .day.today .day-number {
             color: var(--vscode-editor-background);
             font-weight: bold;
-            border: 1px solid var(--vscode-focusBorder);
         }
         .day.has-file {
             background: var(--vscode-sideBarSectionHeader-foreground);
+        }
+        .day.has-file .day-number {
             color: var(--vscode-button-foreground);
             font-weight: bold;
         }
@@ -735,8 +769,9 @@ export async function activate(context: vscode.ExtensionContext) {
         }
         .day.today.has-file {
             background: var(--vscode-focusBorder);
+        }
+        .day.today.has-file .day-number {
             color: var(--vscode-editor-background);
-            border: 1px solid var(--vscode-focusBorder);
         }
     </style>
 </head>
