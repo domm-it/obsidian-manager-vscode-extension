@@ -448,57 +448,7 @@ export async function activate(context: vscode.ExtensionContext) {
   let treeView = vscode.window.createTreeView('obsidianFiles', { treeDataProvider: provider, dragAndDropController: dndController });
   context.subscriptions.push(treeView);
 
-  // Create compact actions webview
-  const actionsViewProvider = vscode.window.registerWebviewViewProvider('obsidianActions', {
-    resolveWebviewView(webviewView: vscode.WebviewView) {
-      webviewView.webview.options = { enableScripts: true };
-      webviewView.webview.html = `<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <style>
-        body {
-            font-family: var(--vscode-font-family);
-            padding: 6px 8px;
-            margin: 0;
-        }
-        .button {
-            background-color: var(--vscode-button-background);
-            color: var(--vscode-button-foreground);
-            border: none;
-            padding: 6px 12px;
-            border-radius: 2px;
-            cursor: pointer;
-            font-size: 14px;
-            width: 100%;
-            text-align: center;
-            font-weight: 500;
-            margin-bottom: 4px;
-        }
-        .button:hover {
-            background-color: var(--vscode-button-hoverBackground);
-        }
-    </style>
-</head>
-<body>
-    <button class="button" onclick="executeCommand()">Create today recap</button>
-    <script>
-        const vscode = acquireVsCodeApi();
-        function executeCommand() {
-            vscode.postMessage({ command: 'createTodayInRoot' });
-        }
-    </script>
-</body>
-</html>`;
 
-      webviewView.webview.onDidReceiveMessage(message => {
-        if (message.command === 'createTodayInRoot') {
-          vscode.commands.executeCommand('obsidianManager.createTodayInRoot');
-        }
-      });
-    }
-  });
-  context.subscriptions.push(actionsViewProvider);
 
   // Create calendar webview
   let currentCalendarView: vscode.WebviewView | undefined;
@@ -601,8 +551,11 @@ export async function activate(context: vscode.ExtensionContext) {
         }
         
         let calendarHtml = `
-          <div class="folder-selector">
-            <select onchange="folderChanged(this.value)">
+          <div class="top-controls">
+            <button class="action-button" onclick="createTodayRecap()" title="Create today recap">
+              📋
+            </button>
+            <select class="folder-selector" onchange="folderChanged(this.value)">
               ${folderOptions}
             </select>
           </div>
@@ -667,11 +620,30 @@ export async function activate(context: vscode.ExtensionContext) {
             margin: 0;
             font-size: 11px;
         }
-        .folder-selector {
+        .top-controls {
+            display: flex;
+            gap: 8px;
             margin-bottom: 8px;
+            align-items: center;
         }
-        .folder-selector select {
-            width: 100%;
+        .action-button {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            padding: 6px 8px;
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 8px;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .action-button:hover {
+            background: var(--vscode-button-hoverBackground);
+        }
+        .folder-selector {
+            flex: 1;
             padding: 4px 8px;
             background: var(--vscode-input-background);
             color: var(--vscode-input-foreground);
@@ -844,6 +816,10 @@ export async function activate(context: vscode.ExtensionContext) {
             }
         });
         
+        function createTodayRecap() {
+            vscode.postMessage({ command: 'createTodayInRoot' });
+        }
+        
         function dayClicked(dateStr) {
             const existingFilePaths = filePathsMap[dateStr];
             vscode.postMessage({ 
@@ -865,6 +841,8 @@ export async function activate(context: vscode.ExtensionContext) {
       webviewView.webview.onDidReceiveMessage(async message => {
         if (message.command === 'updateCalendar') {
           await updateCalendar(message.year, message.month, message.folder);
+        } else if (message.command === 'createTodayInRoot') {
+          vscode.commands.executeCommand('obsidianManager.createTodayInRoot');
         } else if (message.command === 'dayClicked') {
           const cfg = vscode.workspace.getConfiguration('obsidianManager');
           const vaultPath = cfg.get<string>('vault', '');

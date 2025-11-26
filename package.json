@@ -423,12 +423,6 @@
 		"views": {
 			"obsidianManager": [
 				{
-					"id": "obsidianActions",
-					"name": "Actions",
-					"type": "webview",
-					"visibility": "visible"
-				},
-				{
 					"id": "obsidianCalendar",
 					"name": "Calendar",
 					"type": "webview",
