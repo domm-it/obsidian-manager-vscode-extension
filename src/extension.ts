@@ -884,46 +884,51 @@ export async function activate(context: vscode.ExtensionContext) {
             return;
           }
           
-          // Check if we have existing file paths from the scan
+          const currentFolder = message.folder || 'Root';
           const existingFilePaths = message.existingFilePaths;
           
+          // Create quick pick items - always start with "Create new file" option
+          const quickPickItems: vscode.QuickPickItem[] = [];
+          
+          // Add "Create new file" as first option
+          quickPickItems.push({
+            label: 'Create new file in selected folder',
+            description: `Create in ${currentFolder === 'Root' ? 'root folder' : currentFolder}`,
+            detail: 'NEW_FILE'
+          });
+          
+          // Add existing files if any
           if (existingFilePaths && existingFilePaths.length > 0) {
-            let selectedFilePath: string;
+            // Add separator
+            quickPickItems.push({
+              label: '',
+              description: '─────────────────────────',
+              detail: '__SEPARATOR__',
+              kind: vscode.QuickPickItemKind.Separator
+            });
             
-            if (existingFilePaths.length === 1) {
-              // Only one file, open it directly
-              selectedFilePath = existingFilePaths[0];
-            } else {
-              // Multiple files, show quick pick dialog
-              const quickPickItems: vscode.QuickPickItem[] = existingFilePaths.map((filePath: string) => ({
+            // Add existing files
+            existingFilePaths.forEach((filePath: string) => {
+              quickPickItems.push({
                 label: path.basename(filePath),
                 description: path.relative(vaultPath, path.dirname(filePath)),
                 detail: filePath
-              }));
-              
-              const selectedItem = await vscode.window.showQuickPick(quickPickItems, {
-                placeHolder: `Select which file to open for ${message.date}...`,
-                matchOnDescription: true
               });
-              
-              if (!selectedItem) {
-                return; // User cancelled
-              }
-              
-              selectedFilePath = selectedItem.detail!;
-            }
-            
-            // Open the selected file
-            const openFileMode = cfg.get<string>('openFileMode', 'preview');
-            if (openFileMode === 'preview') {
-              await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(selectedFilePath));
-            } else {
-              const document = await vscode.workspace.openTextDocument(vscode.Uri.file(selectedFilePath));
-              await vscode.window.showTextDocument(document, { preview: false });
-            }
-          } else {
-            // File doesn't exist, prompt for filename
-            const currentFolder = message.folder || 'Root';
+            });
+          }
+          
+          // Show quick pick dialog
+          const selectedItem = await vscode.window.showQuickPick(quickPickItems, {
+            placeHolder: `Options for ${message.date}...`,
+            matchOnDescription: true
+          });
+          
+          if (!selectedItem || selectedItem.detail === '__SEPARATOR__') {
+            return; // User cancelled or selected separator
+          }
+          
+          if (selectedItem.detail === 'NEW_FILE') {
+            // Create new file - prompt for filename
             const folderPath = currentFolder === 'Root' ? vaultPath : path.join(vaultPath, currentFolder);
             const defaultFileName = message.date; // YYYY-MM-DD format
             
@@ -977,6 +982,18 @@ export async function activate(context: vscode.ExtensionContext) {
               }
             }
             // If fileName is undefined (user pressed Esc), do nothing
+          } else {
+            // Open existing file
+            const selectedFilePath = selectedItem.detail!;
+            
+            // Open the selected file
+            const openFileMode = cfg.get<string>('openFileMode', 'preview');
+            if (openFileMode === 'preview') {
+              await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(selectedFilePath));
+            } else {
+              const document = await vscode.workspace.openTextDocument(vscode.Uri.file(selectedFilePath));
+              await vscode.window.showTextDocument(document, { preview: false });
+            }
           }
         }
       });
