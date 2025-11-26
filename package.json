@@ -129,6 +129,12 @@
 				"title": "Obsidian > Include clipboard in Code Block",
 				"category": "Obsidian manager",
 				"icon": "$(clippy)"
+			},
+			{
+				"command": "obsidianManager.putInsideCodeblock",
+				"title": "Obsidian > Put inside a codeblock",
+				"category": "Obsidian manager",
+				"icon": "$(code)"
 			}
 		],
 		"menus": {
@@ -179,6 +185,11 @@
 				},
 				{
 					"command": "obsidianManager.includeClipboardCodeBlock",
+					"when": "resourceExtname == .md || editorLangId == markdown",
+					"group": "obsidian"
+				},
+				{
+					"command": "obsidianManager.putInsideCodeblock",
 					"when": "resourceExtname == .md || editorLangId == markdown",
 					"group": "obsidian"
 				}
@@ -253,13 +264,19 @@
 			{
 				"command": "obsidianManager.linkDocument",
 				"key": "ctrl+shift+l",
-				"mac": "cmd+shift+l",
+				"mac": "ctrl+shift+l",
 				"when": "editorTextFocus && resourceExtname == .md"
 			},
 			{
 				"command": "obsidianManager.includeClipboardCodeBlock",
 				"key": "ctrl+shift+v",
-				"mac": "cmd+shift+v",
+				"mac": "ctrl+shift+v",
+				"when": "editorTextFocus && resourceExtname == .md"
+			},
+			{
+				"command": "obsidianManager.putInsideCodeblock",
+				"key": "ctrl+shift+c",
+				"mac": "ctrl+shift+c",
 				"when": "editorTextFocus && resourceExtname == .md"
 			}
 		],

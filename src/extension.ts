@@ -635,6 +635,53 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   });
   context.subscriptions.push(includeClipboardCodeBlockCmd);
+
+  // Command to put selected text or create empty codeblock
+  const putInsideCodeblockCmd = vscode.commands.registerCommand('obsidianManager.putInsideCodeblock', async () => {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      vscode.window.showErrorMessage('No active editor found.');
+      return;
+    }
+
+    // Check if current file is markdown
+    if (!editor.document.fileName.endsWith('.md')) {
+      vscode.window.showErrorMessage('Put inside codeblock command is only available for Markdown files.');
+      return;
+    }
+
+    try {
+      const selection = editor.selection;
+      const selectedText = editor.document.getText(selection);
+      
+      await editor.edit(editBuilder => {
+        if (selectedText && !selection.isEmpty) {
+          // Wrap selected text in codeblock
+          const codeBlock = `\`\`\`\n${selectedText}\n\`\`\``;
+          editBuilder.replace(selection, codeBlock);
+        } else {
+          // Create empty codeblock and position cursor inside
+          const codeBlock = '\`\`\`\n\n\`\`\`';
+          editBuilder.insert(selection.active, codeBlock);
+        }
+      });
+
+      // Position cursor appropriately
+      if (!selectedText || selection.isEmpty) {
+        // Move cursor to inside the empty codeblock (after first newline)
+        const currentPosition = selection.active;
+        const newPosition = new vscode.Position(
+          currentPosition.line + 1, // Move to next line (inside codeblock)
+          0 // Start of line
+        );
+        editor.selection = new vscode.Selection(newPosition, newPosition);
+      }
+
+    } catch (err) {
+      vscode.window.showErrorMessage(`Error creating codeblock: ${String(err)}`);
+    }
+  });
+  context.subscriptions.push(putInsideCodeblockCmd);
 }
 
 export function deactivate() {}
