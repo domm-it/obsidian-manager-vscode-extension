@@ -134,6 +134,36 @@
 				"title": "Obsidian > Put inside a codeblock",
 				"category": "Obsidian manager",
 				"icon": "$(code)"
+			},
+			{
+				"command": "obsidianManager.openFileFromView.context",
+				"title": "Open in Obsidian",
+				"category": "Obsidian manager",
+				"icon": "$(link-external)"
+			},
+			{
+				"command": "obsidianManager.createFileInFolder.context",
+				"title": "New note",
+				"category": "Obsidian manager",
+				"icon": "$(new-file)"
+			},
+			{
+				"command": "obsidianManager.createFolder.context",
+				"title": "New folder",
+				"category": "Obsidian manager",
+				"icon": "$(new-folder)"
+			},
+			{
+				"command": "obsidianManager.renameItem.context",
+				"title": "Rename",
+				"category": "Obsidian manager",
+				"icon": "$(edit)"
+			},
+			{
+				"command": "obsidianManager.deleteItem.context",
+				"title": "Delete",
+				"category": "Obsidian manager",
+				"icon": "$(trash)"
 			}
 		],
 		"menus": {
@@ -174,6 +204,31 @@
 					"command": "obsidianManager.deleteItem",
 					"when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
 					"group": "inline"
+				},
+				{
+					"command": "obsidianManager.openFileFromView.context",
+					"when": "view == obsidianFiles && viewItem == obsidianFile",
+					"group": "1_open"
+				},
+				{
+					"command": "obsidianManager.createFileInFolder.context",
+					"when": "view == obsidianFiles && viewItem == obsidianFolder",
+					"group": "2_create"
+				},
+				{
+					"command": "obsidianManager.createFolder.context",
+					"when": "view == obsidianFiles && viewItem == obsidianFolder",
+					"group": "2_create"
+				},
+				{
+					"command": "obsidianManager.renameItem.context",
+					"when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
+					"group": "3_modify"
+				},
+				{
+					"command": "obsidianManager.deleteItem.context",
+					"when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
+					"group": "4_delete"
 				}
 			],
 			"editor/context": [

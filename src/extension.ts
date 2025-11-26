@@ -682,6 +682,22 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   });
   context.subscriptions.push(putInsideCodeblockCmd);
+
+  // Register context menu aliases (without numbers) that call the original commands
+  const contextAliases = [
+    { alias: 'obsidianManager.openFileFromView.context', original: 'obsidianManager.openFileFromView' },
+    { alias: 'obsidianManager.createFileInFolder.context', original: 'obsidianManager.createFileInFolder' },
+    { alias: 'obsidianManager.createFolder.context', original: 'obsidianManager.createFolder' },
+    { alias: 'obsidianManager.renameItem.context', original: 'obsidianManager.renameItem' },
+    { alias: 'obsidianManager.deleteItem.context', original: 'obsidianManager.deleteItem' }
+  ];
+
+  for (const { alias, original } of contextAliases) {
+    const aliasCmd = vscode.commands.registerCommand(alias, async (...args: any[]) => {
+      await vscode.commands.executeCommand(original, ...args);
+    });
+    context.subscriptions.push(aliasCmd);
+  }
 }
 
 export function deactivate() {}
