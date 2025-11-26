@@ -451,6 +451,13 @@
 					"visibility": "visible"
 				}
 			]
-		}
+		},
+		"markdown.markdownItPlugins": true,
+		"markdown.previewStyles": [
+			"./styles/markdown-preview.css"
+		],
+		"markdown.previewScripts": [
+			"./styles/markdown-preview.js"
+		]
 	}
 }

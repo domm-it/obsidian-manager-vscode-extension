@@ -1,0 +1,64 @@
+/* Copy button for code blocks in markdown preview */
+.code-block-container {
+    position: relative;
+}
+
+pre {
+    position: relative;
+}
+
+.copy-button {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: 1px solid var(--vscode-button-border, transparent);
+    border-radius: 3px;
+    padding: 4px 8px;
+    font-size: 11px;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    z-index: 10;
+}
+
+.copy-button:hover {
+    opacity: 1;
+    background: var(--vscode-button-hoverBackground);
+}
+
+.copy-button:active {
+    background: var(--vscode-button-secondaryBackground);
+}
+
+
+
+.copy-button.copied {
+    background: var(--vscode-inputValidation-infoBackground);
+    color: var(--vscode-inputValidation-infoForeground);
+}
+
+/* Hide copy button by default, show on hover */
+pre .copy-button {
+    opacity: 0;
+    pointer-events: none;
+}
+
+pre:hover .copy-button {
+    opacity: 0.7;
+    pointer-events: auto;
+}
+
+pre:hover .copy-button:hover {
+    opacity: 1;
+}
+
+/* Ensure code blocks have proper positioning context */
+pre > code {
+    display: block;
+    padding-right: 60px; /* Make space for copy button */
+}
