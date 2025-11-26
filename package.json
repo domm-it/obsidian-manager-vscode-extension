@@ -2,7 +2,7 @@
 	"name": "obsidian-manager",
 	"displayName": "Obsidian Manager",
 	"description": "Adds a button and a vault/file manager view to open and manage Markdown files with Obsidian.",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"publisher": "domm-it",
 	"icon": "images/logo.png",
 	"author": {
@@ -110,8 +110,7 @@
 				"title": "Toggle view mode",
 				"category": "Obsidian manager",
 				"icon": "$(list-unordered)"
-			}
-			,
+			},
 			{
 				"command": "obsidianManager.toggleExpandAll",
 				"title": "Toggle expand/collapse all",
@@ -232,7 +231,6 @@
 		"configuration": {
 			"title": "Obsidian manager",
 			"properties": {
-                    
 				"obsidianManager.vault": {
 					"type": "string",
 					"default": "",
@@ -248,7 +246,6 @@
 					"default": true,
 					"description": "Show icons next to files and folders in the Obsidian sidebar view. Set to false to hide icons for a compact list."
 				},
-                
 				"obsidianManager.viewMode": {
 					"type": "string",
 					"enum": [
