@@ -34,10 +34,10 @@ export class ObsidianTreeProvider implements vscode.TreeDataProvider<ObsidianNod
 
   getTreeItem(element: ObsidianNode): vscode.TreeItem {
     const label = path.basename(element.resourceUri.fsPath);
-  // Respect user setting whether folders should be expanded on load
+	// Respect user setting whether folders should be expanded on load
     const cfg = vscode.workspace.getConfiguration('obsidianManager');
-  const expandOnLoad = cfg.get<boolean>('expandFoldersOnLoad', true);
-  const treeItem = new vscode.TreeItem(
+	const expandOnLoad = cfg.get<boolean>('expandFoldersOnLoad', true);
+	const treeItem = new vscode.TreeItem(
     label,
     element.isDirectory
       ? (expandOnLoad ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed)

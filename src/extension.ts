@@ -372,6 +372,62 @@ export async function activate(context: vscode.ExtensionContext) {
   let treeView = vscode.window.createTreeView('obsidianFiles', { treeDataProvider: provider, dragAndDropController: dndController });
   context.subscriptions.push(treeView);
 
+  // Create compact actions webview
+  const actionsViewProvider = vscode.window.registerWebviewViewProvider('obsidianActions', {
+    resolveWebviewView(webviewView: vscode.WebviewView) {
+      webviewView.webview.options = { enableScripts: true };
+      webviewView.webview.html = `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: var(--vscode-font-family);
+            padding: 6px 8px;
+            margin: 0;
+        }
+        .button {
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            padding: 6px 12px;
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 14px;
+            width: 100%;
+            text-align: center;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+        .button:hover {
+            background-color: var(--vscode-button-hoverBackground);
+        }
+    </style>
+</head>
+<body>
+    <button class="button" onclick="executeCommand()">Create today recap</button>
+    <script>
+        const vscode = acquireVsCodeApi();
+        function executeCommand() {
+            vscode.postMessage({ command: 'createTodayInRoot' });
+        }
+    </script>
+</body>
+</html>`;
+
+      webviewView.webview.onDidReceiveMessage(message => {
+        if (message.command === 'createTodayInRoot') {
+          vscode.commands.executeCommand('obsidianManager.createTodayInRoot');
+        }
+      });
+    }
+  });
+  context.subscriptions.push(actionsViewProvider);
+
+
+
+
+
   // Command to expand (reveal) all folders in the view with progress and diagnostics
   const explodeCmd = vscode.commands.registerCommand('obsidianManager.explodeView', async () => {
     try {
@@ -846,6 +902,137 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   });
   context.subscriptions.push(createFileInRootCmd);
+
+  // Command to create today's aggregated note in vault root
+  const createTodayInRootCmd = vscode.commands.registerCommand('obsidianManager.createTodayInRoot', async () => {
+    const cfg = vscode.workspace.getConfiguration('obsidianManager');
+    const configuredVault = ((cfg.get<string>('vault') || '')).trim();
+    if (!configuredVault) {
+      vscode.window.showErrorMessage('Please configure the `obsidianManager.vault` setting with the vault path first.');
+      return;
+    }
+
+    // Generate today's date in YYYY-MM-DD format
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const todayString = `${year}-${month}-${day}`;
+    
+    const fileName = `${todayString}.md`;
+    const targetPath = path.join(configuredVault, fileName);
+    
+    try {
+      await vscode.window.withProgress({
+        location: vscode.ProgressLocation.Notification,
+        title: `Aggregating today's notes (${todayString})...`,
+        cancellable: false
+      }, async (progress) => {
+        
+        // Function to recursively search for today's files
+        const findTodayFiles = async (dirPath: string): Promise<string[]> => {
+          const foundFiles: string[] = [];
+          try {
+            const entries = await fs.readdir(dirPath, { withFileTypes: true });
+            
+            for (const entry of entries) {
+              const fullPath = path.join(dirPath, entry.name);
+              
+              if (entry.isDirectory()) {
+                // Recursively search in subdirectories
+                const subFiles = await findTodayFiles(fullPath);
+                foundFiles.push(...subFiles);
+              } else if (entry.isFile() && entry.name.endsWith('.md')) {
+                // Check if filename contains today's date
+                if (entry.name.includes(todayString)) {
+                  foundFiles.push(fullPath);
+                }
+              }
+            }
+          } catch (err) {
+            // Ignore directories we can't read
+          }
+          return foundFiles;
+        };
+
+        progress.report({ message: 'Searching for today\'s files...', increment: 20 });
+        
+        // Find all files containing today's date
+        const todayFiles = await findTodayFiles(configuredVault);
+        
+        // Filter out the target file if it already exists
+        const filteredFiles = todayFiles.filter(file => file !== targetPath);
+        
+        progress.report({ message: `Found ${filteredFiles.length} files to aggregate...`, increment: 40 });
+        
+        // Build content by creating links organized by folder
+        let aggregatedContent = `# ${todayString}\n\n`;
+        
+        if (filteredFiles.length === 0) {
+          aggregatedContent += `*No other files found for ${todayString}*\n\n`;
+        } else {
+          aggregatedContent += `*Found ${filteredFiles.length} files for ${todayString}*\n\n`;
+          
+          // Group files by folder
+          const filesByFolder: { [folder: string]: string[] } = {};
+          
+          for (const file of filteredFiles) {
+            const relativePath = path.relative(configuredVault, file);
+            const folderPath = path.dirname(relativePath);
+            const folderName = folderPath === '.' ? 'Root' : folderPath;
+            
+            if (!filesByFolder[folderName]) {
+              filesByFolder[folderName] = [];
+            }
+            filesByFolder[folderName].push(file);
+          }
+          
+          // Sort folders alphabetically, but put 'Root' first
+          const sortedFolders = Object.keys(filesByFolder).sort((a, b) => {
+            if (a === 'Root') return -1;
+            if (b === 'Root') return 1;
+            return a.localeCompare(b);
+          });
+          
+          for (const folderName of sortedFolders) {
+            progress.report({ 
+              message: `Creating links for ${folderName}...`, 
+              increment: 40 + (sortedFolders.indexOf(folderName) / sortedFolders.length) * 30 
+            });
+            
+            aggregatedContent += `## ${folderName}\n\n`;
+            
+            for (const file of filesByFolder[folderName]) {
+              const fileName = path.basename(file, '.md');
+              const relativePath = path.relative(configuredVault, file);
+              
+              // Create markdown-style link with full path
+              aggregatedContent += `- [${fileName}](${relativePath})\n`;
+            }
+            
+            aggregatedContent += `\n`;
+          }
+        }
+        
+        progress.report({ message: 'Creating aggregated file...', increment: 90 });
+        
+        // Write the aggregated content
+        await fs.writeFile(targetPath, aggregatedContent);
+        
+        progress.report({ message: 'Opening file...', increment: 100 });
+        
+        // Open the new file in editor
+        await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(targetPath));
+        
+        // Refresh provider so view updates
+        try { await provider.refreshAll(); } catch (e) { provider.refresh(); }
+      });
+      
+    } catch (err) {
+      vscode.window.showErrorMessage(`Unable to create today's aggregated note: ${String(err)}`);
+    }
+  });
+  context.subscriptions.push(createTodayInRootCmd);
 
   // Register context menu aliases (without numbers) that call the original commands
   const contextAliases = [

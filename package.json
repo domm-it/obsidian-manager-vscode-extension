@@ -190,6 +190,12 @@
 				"icon": "$(trash)"
 			},
 			{
+				"command": "obsidianManager.createTodayInRoot",
+				"title": "Create today in root",
+				"category": "Obsidian manager",
+				"icon": "$(calendar)"
+			},
+			{
 				"command": "obsidianManager.createFileInRoot",
 				"title": "New note in root",
 				"category": "Obsidian manager",
@@ -300,14 +306,24 @@
 			],
 			"view/title": [
 				{
+					"command": "obsidianManager.createFolder",
+					"when": "view == obsidianFiles",
+					"group": "navigation@1"
+				},
+				{
+					"command": "obsidianManager.createFileInRoot",
+					"when": "view == obsidianFiles",
+					"group": "navigation@1"
+				},
+				{
 					"command": "obsidianManager.refreshView",
 					"when": "view == obsidianFiles",
-					"group": "navigation"
+					"group": "navigation@2"
 				},
 				{
 					"command": "obsidianManager.toggleViewMode",
 					"when": "view == obsidianFiles && !obsidianManager.viewModeIsList",
-					"group": "navigation"
+					"group": "navigation@2"
 				},
 				{
 					"command": "obsidianManager.toggleExpandAll",
@@ -319,22 +335,12 @@
 				{
 					"command": "obsidianManager.toggleViewMode",
 					"when": "view == obsidianFiles && obsidianManager.viewModeIsList",
-					"group": "navigation"
-				},
-				{
-					"command": "obsidianManager.createFolder",
-					"when": "view == obsidianFiles",
-					"group": "navigation"
-				},
-				{
-					"command": "obsidianManager.createFileInRoot",
-					"when": "view == obsidianFiles",
-					"group": "navigation"
+					"group": "navigation@2"
 				},
 				{
 					"command": "obsidianManager.openSettings",
 					"when": "view == obsidianFiles",
-					"group": "navigation"
+					"group": "navigation@3"
 				}
 			]
 		},
@@ -399,8 +405,15 @@
 		"views": {
 			"obsidianManager": [
 				{
+					"id": "obsidianActions",
+					"name": "Actions",
+					"type": "webview",
+					"visibility": "visible"
+				},
+				{
 					"id": "obsidianFiles",
-					"name": "Files"
+					"name": "Vault files",
+					"visibility": "visible"
 				}
 			]
 		}
