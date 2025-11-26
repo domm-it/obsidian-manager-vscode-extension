@@ -89,7 +89,7 @@
 			},
 			{
 				"command": "obsidianManager.createTodayNote",
-				"title": "2 - Create today",
+				"title": "2 - Create today & set calendar",
 				"category": "Obsidian manager",
 				"icon": "$(calendar)"
 			},
@@ -160,8 +160,14 @@
 				"icon": "$(new-file)"
 			},
 			{
+				"command": "obsidianManager.createTodayNote",
+				"title": "2 - Set calendar to folder",
+				"category": "Obsidian manager",
+				"icon": "$(calendar)"
+			},
+			{
 				"command": "obsidianManager.createTodayNote.context",
-				"title": "Create today",
+				"title": "Set calendar to folder",
 				"category": "Obsidian manager",
 				"icon": "$(calendar)"
 			},

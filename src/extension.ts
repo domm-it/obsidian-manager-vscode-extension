@@ -813,6 +813,13 @@ export async function activate(context: vscode.ExtensionContext) {
                     month: currentMonth, 
                     folder: selectedFolder 
                 });
+            } else if (message.command === 'selectFolder') {
+                // Update dropdown selection
+                const folderSelect = document.querySelector('.folder-selector');
+                if (folderSelect && message.folder !== undefined) {
+                    folderSelect.value = message.folder;
+                    folderChanged(message.folder);
+                }
             }
         });
         
@@ -843,6 +850,9 @@ export async function activate(context: vscode.ExtensionContext) {
           await updateCalendar(message.year, message.month, message.folder);
         } else if (message.command === 'createTodayInRoot') {
           vscode.commands.executeCommand('obsidianManager.createTodayInRoot');
+        } else if (message.command === 'selectFolder') {
+          // This message is sent from extension to webview to update dropdown selection
+          return;
         } else if (message.command === 'dayClicked') {
           const cfg = vscode.workspace.getConfiguration('obsidianManager');
           const vaultPath = cfg.get<string>('vault', '');
@@ -1367,43 +1377,18 @@ export async function activate(context: vscode.ExtensionContext) {
     const fileName = `${todayString}.md`;
     const targetPath = path.join(folderFs, fileName);
     
-    try {
-      // Check if file already exists
-      try {
-        await fs.access(targetPath);
-        // File exists, open it instead of creating
-        const openFileMode = cfg.get<string>('openFileMode', 'preview');
-        if (openFileMode === 'preview') {
-          await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(targetPath));
-        } else {
-          const document = await vscode.workspace.openTextDocument(vscode.Uri.file(targetPath));
-          await vscode.window.showTextDocument(document, { preview: false });
-        }
-        vscode.window.showInformationMessage(`Today's note already exists: ${fileName}`);
-        return;
-      } catch (e) {
-        // File doesn't exist, proceed to create it
-      }
+    // Update calendar dropdown to show the selected folder
+    if (currentCalendarView && configuredVault) {
+      const relativePath = path.relative(configuredVault, folderFs);
+      const folderToSelect = relativePath === '' || relativePath === '.' ? 'Root' : path.basename(folderFs);
       
-      // Create file content with H1 header
-      const content = `# ${todayString}\n\n`;
-      await fs.writeFile(targetPath, content);
-      
-      // Open the new file in editor
-      const openFileMode = cfg.get<string>('openFileMode', 'preview');
-      if (openFileMode === 'preview') {
-        await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(targetPath));
-      } else {
-        const document = await vscode.workspace.openTextDocument(vscode.Uri.file(targetPath));
-        await vscode.window.showTextDocument(document, { preview: false });
-      }
-      
-      // Refresh provider so view updates
-      try { await provider.refreshAll(); } catch (e) { provider.refresh(); }
-      
-    } catch (err) {
-      vscode.window.showErrorMessage(`Unable to create today's note: ${String(err)}`);
+      currentCalendarView.webview.postMessage({
+        command: 'selectFolder',
+        folder: folderToSelect
+      });
     }
+    
+    // No file operations - calendar will handle file opening
   });
   context.subscriptions.push(createTodayCmd);
 
