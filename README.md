@@ -25,10 +25,26 @@ Replacing the icon
 
 To use an official Obsidian icon (or a custom image) replace `images/obsidian.svg` with your chosen SVG (respect the logo license).
 
+New Link Document Feature
+
+The extension now includes a powerful feature to create links to other documents within your Obsidian vault:
+
+- **Command**: `Obsidian Manager: Link to Document`
+- **Keyboard shortcut**: `Ctrl+Shift+L` (Windows/Linux) or `Cmd+Shift+L` (Mac)
+- **Usage**: While editing a Markdown file, use the command or keyboard shortcut to open a quick pick dialog showing all Markdown files in your vault. Select a file to insert an Obsidian-style link (`[[filename]]`) at your cursor position.
+- **Smart link generation**: The extension automatically generates the appropriate link format based on file locations within your vault.
+- **Selected text support**: If you have text selected when using the command, it will be used as custom link text in the format `[[filename|selected text]]`.
+
+Access the Link Document feature through:
+- The editor title bar (link icon)
+- Right-click context menu in Markdown files  
+- Command palette: "Obsidian Manager: Link to Document"
+- Keyboard shortcut: `Ctrl+Shift+L` / `Cmd+Shift+L`
+
 Possible future improvements
 
 - Support a workspace -> vault mapping so the extension can build `obsidian://open?vault=...&file=...` links correctly.
-- Improve the UI (for example add a contextual command in Explorer or a status bar button).
+- Add support for linking to specific headings within documents.
 
 Settings
 

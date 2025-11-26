@@ -7,6 +7,50 @@ import * as os from 'os';
 // Drag & Drop controller state (last dragged items). We'll record last dragged sources in memory
 let _lastDragged: any[] = [];
 
+// Helper function to get all markdown files from the vault
+async function getAllMarkdownFiles(provider: ObsidianTreeProvider, vaultPath: string): Promise<any[]> {
+  const allFiles: any[] = [];
+  
+  async function collectFiles(node?: any): Promise<void> {
+    const children = await provider.getChildren(node);
+    for (const child of children) {
+      if (child.isDirectory) {
+        await collectFiles(child);
+      } else if (child.resourceUri.fsPath.toLowerCase().endsWith('.md')) {
+        allFiles.push(child);
+      }
+    }
+  }
+  
+  await collectFiles();
+  return allFiles;
+}
+
+// Helper function to generate Obsidian link based on file paths
+function generateObsidianLink(targetFilePath: string, currentFilePath: string, vaultPath: string): string {
+  // Get relative paths from vault root
+  const targetRelative = path.relative(vaultPath, targetFilePath);
+  const currentRelative = path.relative(vaultPath, currentFilePath);
+  
+  // Remove .md extension for Obsidian link format
+  const targetWithoutExt = targetRelative.replace(/\.md$/, '');
+  
+  // Check if files are in same directory
+  const targetDir = path.dirname(targetRelative);
+  const currentDir = path.dirname(currentRelative);
+  
+  if (targetDir === currentDir && targetDir === '.') {
+    // Both files in vault root
+    return `[[${path.basename(targetWithoutExt)}]]`;
+  } else if (targetDir === currentDir) {
+    // Same directory, use just filename
+    return `[[${path.basename(targetWithoutExt)}]]`;
+  } else {
+    // Different directories, use full path relative to vault
+    return `[[${targetWithoutExt}]]`;
+  }
+}
+
 class ObsidianDragAndDropController implements vscode.TreeDragAndDropController<any> {
   readonly dragMimeTypes = ['application/vnd.code.tree.obsidianFiles'];
   readonly dropMimeTypes = ['application/vnd.code.tree.obsidianFiles'];
@@ -459,6 +503,96 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   });
   context.subscriptions.push(refreshCmd);
+
+  // Command to link to another document in the vault
+  const linkDocumentCmd = vscode.commands.registerCommand('obsidianManager.linkDocument', async () => {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      vscode.window.showErrorMessage('No active editor found.');
+      return;
+    }
+
+    // Check if current file is markdown
+    if (!editor.document.fileName.endsWith('.md')) {
+      vscode.window.showErrorMessage('Link document command is only available for Markdown files.');
+      return;
+    }
+
+    const cfg = vscode.workspace.getConfiguration('obsidianManager');
+    const configuredVault = ((cfg.get<string>('vault') || '')).trim();
+    if (!configuredVault) {
+      vscode.window.showErrorMessage('Please configure the obsidianManager.vault setting first.');
+      return;
+    }
+
+    try {
+      // Get all markdown files from the provider's cache
+      await provider.ensurePreloaded();
+      const allFiles = await getAllMarkdownFiles(provider, configuredVault);
+      
+      if (allFiles.length === 0) {
+        vscode.window.showWarningMessage('No markdown files found in the vault.');
+        return;
+      }
+
+      // Create quick pick items
+      const quickPickItems: vscode.QuickPickItem[] = allFiles.map(file => {
+        const relativePath = path.relative(configuredVault, file.resourceUri.fsPath);
+        const fileName = path.basename(file.resourceUri.fsPath, '.md');
+        
+        return {
+          label: fileName,
+          description: relativePath,
+          detail: file.resourceUri.fsPath
+        };
+      });
+
+      // Sort by file name
+      quickPickItems.sort((a, b) => a.label.localeCompare(b.label));
+
+      // Show quick pick dialog
+      const selectedItem = await vscode.window.showQuickPick(quickPickItems, {
+        placeHolder: 'Select a document to link to...',
+        matchOnDescription: true,
+        matchOnDetail: true
+      });
+
+      if (!selectedItem) {
+        return; // User cancelled
+      }
+
+      // Get the selected file path
+      const selectedFilePath = selectedItem.detail!;
+      const currentFilePath = editor.document.fileName;
+      
+      // Check if there's selected text to use as link text
+      const selection = editor.selection;
+      const selectedText = editor.document.getText(selection);
+      
+      // Generate the appropriate link format
+      let linkText: string;
+      if (selectedText && !selection.isEmpty) {
+        // Use selected text as custom link text
+        const targetWithoutExt = path.basename(selectedFilePath, '.md');
+        linkText = `[[${targetWithoutExt}|${selectedText}]]`;
+      } else {
+        linkText = generateObsidianLink(selectedFilePath, currentFilePath, configuredVault);
+      }
+      
+      // Insert or replace the link
+      await editor.edit(editBuilder => {
+        if (selectedText && !selection.isEmpty) {
+          editBuilder.replace(selection, linkText);
+        } else {
+          editBuilder.insert(selection.active, linkText);
+        }
+      });
+
+    } catch (err) {
+      vscode.window.showErrorMessage(`Error linking document: ${String(err)}`);
+    }
+  });
+  context.subscriptions.push(linkDocumentCmd);
 }
 
 export function deactivate() {}

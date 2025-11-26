@@ -117,12 +117,23 @@
 				"title": "Toggle expand/collapse all",
 				"category": "Obsidian manager",
 				"icon": "$(collapse-all)"
+			},
+			{
+				"command": "obsidianManager.linkDocument",
+				"title": "Obsidian > Link to Document",
+				"category": "Obsidian manager",
+				"icon": "$(link)"
 			}
 		],
 		"menus": {
 			"editor/title": [
 				{
 					"command": "obsidianManager.openFile.icon",
+					"when": "resourceExtname == .md || editorLangId == markdown",
+					"group": "navigation"
+				},
+				{
+					"command": "obsidianManager.linkDocument",
 					"when": "resourceExtname == .md || editorLangId == markdown",
 					"group": "navigation"
 				}
@@ -152,6 +163,13 @@
 					"command": "obsidianManager.deleteItem",
 					"when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
 					"group": "inline"
+				}
+			],
+			"editor/context": [
+				{
+					"command": "obsidianManager.linkDocument",
+					"when": "resourceExtname == .md || editorLangId == markdown",
+					"group": "obsidian"
 				}
 			],
 			"view/title": [
@@ -220,6 +238,14 @@
 				}
 			}
 		},
+		"keybindings": [
+			{
+				"command": "obsidianManager.linkDocument",
+				"key": "ctrl+shift+l",
+				"mac": "cmd+shift+l",
+				"when": "editorTextFocus && resourceExtname == .md"
+			}
+		],
 		"viewsContainers": {
 			"activitybar": [
 				{
