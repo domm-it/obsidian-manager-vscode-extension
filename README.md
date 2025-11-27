@@ -16,6 +16,37 @@ npm run compile
 3. Press F5 to launch a new "Extension Development Host" window.
 4. Open a `.md` file. If the active editor is Markdown you'll see the Obsidian icon in the editor title area — clicking it will invoke an `obsidian://open?path=...` URL on your OS.
 
+## Building and Installing the Extension
+
+To create a `.vsix` package that can be installed in VS Code:
+
+1. Make sure you have the required dependencies installed:
+
+```bash
+npm install
+```
+
+2. Build the extension package:
+
+```bash
+npm run package
+```
+
+This will create a `.vsix` file in the root directory (e.g., `obsidian-manager-1.1.2.vsix`).
+
+3. Install the extension from the `.vsix` file:
+   - Open VS Code
+   - Go to Extensions view (`Ctrl+Shift+X` / `Cmd+Shift+X`)
+   - Click the "..." menu in the Extensions view
+   - Select "Install from VSIX..."
+   - Choose the generated `.vsix` file
+
+Alternatively, you can install from command line:
+
+```bash
+code --install-extension obsidian-manager-1.1.2.vsix
+```
+
 Notes on URLs and compatibility
 
 - The extension tries a few deep link formats to open files in Obsidian. You can adjust behavior via the extension settings (see below).
