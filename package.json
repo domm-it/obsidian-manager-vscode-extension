@@ -2,7 +2,7 @@
 	"name": "obsidian-manager",
 	"displayName": "Obsidian Manager",
 	"description": "Adds a button and a vault/file manager view to open and manage Markdown files with Obsidian.",
-	"version": "1.2.0",
+	"version": "1.2.1",
 	"publisher": "domm-it",
 	"icon": "images/logo.png",
 	"author": {
@@ -425,11 +425,13 @@
 					"type": "boolean",
 					"default": true,
 					"description": "Automatically add an H1 title (based on filename) as the first line when creating new files."
-				}
-				,
+				},
 				"obsidianManager.linkPreviewMode": {
 					"type": "string",
-					"enum": ["full", "lastSegment"],
+					"enum": [
+						"full",
+						"lastSegment"
+					],
 					"default": "full",
 					"description": "When pasting a URL as a link: 'full' shows the full URL as link text; 'lastSegment' shows only the last path segment/file name. Query strings and hashes are removed from the preview."
 				}
@@ -453,8 +455,7 @@
 				"key": "ctrl+shift+c",
 				"mac": "ctrl+shift+c",
 				"when": "editorTextFocus && resourceExtname == .md"
-			}
-			,
+			},
 			{
 				"command": "obsidianManager.pasteAsLink",
 				"key": "ctrl+v",
