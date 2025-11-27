@@ -1291,6 +1291,61 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   context.subscriptions.push(includeClipboardCodeBlockCmd);
 
+  // Command to paste clipboard as a markdown link or an obsidian file link snippet
+  const pasteAsLinkCmd = vscode.commands.registerCommand('obsidianManager.pasteAsLink', async () => {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      vscode.window.showErrorMessage('No active editor found.');
+      return;
+    }
+
+    // Only for markdown files
+    if (!editor.document.fileName.endsWith('.md')) {
+      vscode.window.showErrorMessage('Paste as link command is only available for Markdown files.');
+      return;
+    }
+
+    try {
+      const clipboardContent = (await vscode.env.clipboard.readText()) || '';
+      if (!clipboardContent) {
+        vscode.window.showWarningMessage('Clipboard is empty.');
+        return;
+      }
+
+      const selection = editor.selection;
+      const trimmed = clipboardContent.trim();
+
+      if (/^https?:\/\//i.test(trimmed)) {
+        const cfg = vscode.workspace.getConfiguration('obsidianManager');
+        const mode = cfg.get<string>('linkPreviewMode', 'full');
+
+        // Remove query/hash part for display purposes
+        const withoutQuery = trimmed.split(/[?#]/)[0];
+        let displayText = withoutQuery;
+        if (mode === 'lastSegment') {
+          // Use only the last path segment (filename-like)
+          const trimmedPath = withoutQuery.replace(/\/+$/g, '');
+          const parts = trimmedPath.split('/').filter(Boolean);
+          displayText = parts.length ? parts[parts.length - 1] : withoutQuery;
+        }
+
+        // Escape any snippet dollar signs to avoid accidental variable expansion
+        displayText = displayText.replace(/\$/g, '\\$');
+
+        const snippet = new vscode.SnippetString(`[${displayText}](${trimmed})`);
+        await editor.insertSnippet(snippet, selection);
+      } else {
+        // Insert provided snippet that references the clipboard and builds a vscode://file/ link
+        const snippetText = "[${1:${CLIPBOARD/(.*[\\/])?([^\\/]+)$/$2/}}](vscode://file/${2:$CLIPBOARD})$0";
+        const snippet = new vscode.SnippetString(snippetText);
+        await editor.insertSnippet(snippet, selection);
+      }
+    } catch (err) {
+      vscode.window.showErrorMessage(`Error pasting as link: ${String(err)}`);
+    }
+  });
+  context.subscriptions.push(pasteAsLinkCmd);
+
   // Command to put selected text or create empty codeblock
   const putInsideCodeblockCmd = vscode.commands.registerCommand('obsidianManager.putInsideCodeblock', async () => {
     const editor = vscode.window.activeTextEditor;
