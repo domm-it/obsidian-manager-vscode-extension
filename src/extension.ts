@@ -1393,6 +1393,208 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   context.subscriptions.push(putInsideCodeblockCmd);
 
+  // Command to copy selected text to another file
+  const copySelectionToFileCmd = vscode.commands.registerCommand('obsidianManager.copySelectionToFile', async () => {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      vscode.window.showErrorMessage('No active editor found.');
+      return;
+    }
+
+    // Check if current file is markdown
+    if (!editor.document.fileName.endsWith('.md')) {
+      vscode.window.showErrorMessage('Copy selection to file command is only available for Markdown files.');
+      return;
+    }
+
+    // Check if there's selected text
+    const selection = editor.selection;
+    const selectedText = editor.document.getText(selection);
+    
+    if (!selectedText || selection.isEmpty) {
+      vscode.window.showErrorMessage('Please select some text first.');
+      return;
+    }
+
+    const cfg = vscode.workspace.getConfiguration('obsidianManager');
+    const configuredVault = ((cfg.get<string>('vault') || '')).trim();
+    if (!configuredVault) {
+      vscode.window.showErrorMessage('Please configure the obsidianManager.vault setting first.');
+      return;
+    }
+
+    try {
+      // Get all markdown files from the provider's cache
+      await provider.ensurePreloaded();
+      const allFiles = await getAllMarkdownFiles(provider, configuredVault);
+
+      // Create quick pick items - first option is to create a new file
+      const quickPickItems: vscode.QuickPickItem[] = [];
+
+      // Add "Create new file" as first option
+      quickPickItems.push({
+        label: '$(file-add) Create new file',
+        description: 'Create a new markdown file with the selected content',
+        detail: '__CREATE_NEW__'
+      });
+
+      // Add separator if there are existing files
+      if (allFiles.length > 0) {
+        quickPickItems.push({
+          label: '',
+          description: '─────────────────────────',
+          detail: '__SEPARATOR__',
+          kind: vscode.QuickPickItemKind.Separator
+        });
+
+        // Add existing files
+        allFiles.forEach(file => {
+          const relativePath = path.relative(configuredVault, file.resourceUri.fsPath);
+          const fileName = path.basename(file.resourceUri.fsPath, '.md');
+          
+          quickPickItems.push({
+            label: fileName,
+            description: relativePath,
+            detail: file.resourceUri.fsPath
+          });
+        });
+
+        // Sort existing files by name (skip the first items which are "Create new" and separator)
+        const filesToSort = quickPickItems.slice(2);
+        filesToSort.sort((a, b) => a.label.localeCompare(b.label));
+        quickPickItems.splice(2, filesToSort.length, ...filesToSort);
+      }
+
+      // Show quick pick dialog
+      const selectedItem = await vscode.window.showQuickPick(quickPickItems, {
+        placeHolder: 'Select destination file or create a new one...',
+        matchOnDescription: true,
+        matchOnDetail: true
+      });
+
+      if (!selectedItem || selectedItem.detail === '__SEPARATOR__') {
+        return; // User cancelled or selected separator
+      }
+
+      if (selectedItem.detail === '__CREATE_NEW__') {
+        // Create new file workflow
+        // Generate today's date as default filename
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        const todayString = `${year}-${month}-${day}`;
+
+        // Show input dialog for new filename
+        const newFileName = await vscode.window.showInputBox({
+          prompt: 'Enter filename for the new file (without .md extension)',
+          value: todayString,
+          placeHolder: 'Enter filename',
+          validateInput: (input) => {
+            if (!input || input.trim() === '') {
+              return 'Filename cannot be empty';
+            }
+            // Check for invalid characters
+            if (/[<>:"/\\|?*]/.test(input)) {
+              return 'Filename contains invalid characters';
+            }
+            return null;
+          }
+        });
+
+        if (!newFileName) {
+          return; // User cancelled
+        }
+
+        const fullFileName = `${newFileName.trim()}.md`;
+        const newFilePath = path.join(configuredVault, fullFileName);
+
+        try {
+          // Check if file already exists
+          try {
+            await fs.access(newFilePath);
+            const choice = await vscode.window.showQuickPick(['Overwrite', 'Cancel'], { 
+              placeHolder: `File "${fullFileName}" already exists. What would you like to do?` 
+            });
+            if (!choice || choice === 'Cancel') return;
+          } catch (e) {
+            // File doesn't exist, continue
+          }
+
+          // Create file content with title and selected text
+          const addTitle = cfg.get<boolean>('addTitleToNewFiles', true);
+          let content = '';
+          if (addTitle) {
+            const title = newFileName.trim();
+            content = `# ${title}\n\n`;
+          }
+          
+          // Add context header with source file name as markdown link with full relative path
+          const sourceFileName = path.basename(editor.document.fileName);
+          const sourceFileNameWithoutExt = path.basename(editor.document.fileName, '.md');
+          const sourceRelativePath = path.relative(configuredVault, editor.document.fileName);
+          content += `---\n\n## Context pasted from [${sourceFileNameWithoutExt}](${sourceRelativePath})\n\n`;
+          content += selectedText;
+
+          // Create the file
+          await fs.writeFile(newFilePath, content);
+
+          // Open the new file
+          const newFileOpenMode = cfg.get<string>('newFileOpenMode', 'edit');
+          if (newFileOpenMode === 'edit') {
+            const document = await vscode.workspace.openTextDocument(vscode.Uri.file(newFilePath));
+            await vscode.window.showTextDocument(document, { preview: false });
+          } else {
+            await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(newFilePath));
+          }
+
+          // Refresh provider
+          try { await provider.refreshAll(); } catch (e) { provider.refresh(); }
+
+        } catch (err) {
+          vscode.window.showErrorMessage(`Failed to create new file: ${String(err)}`);
+        }
+
+      } else {
+        // Append to existing file
+        const targetFilePath = selectedItem.detail!;
+
+        try {
+          // Read existing content
+          const existingContent = await fs.readFile(targetFilePath, 'utf8');
+
+          // Add context header with source file name as markdown link with full relative path
+          const sourceFileName = path.basename(editor.document.fileName);
+          const sourceFileNameWithoutExt = path.basename(editor.document.fileName, '.md');
+          const sourceRelativePath = path.relative(configuredVault, editor.document.fileName);
+          const contextHeader = `---\n\n## Context pasted from [${sourceFileNameWithoutExt}](${sourceRelativePath})\n\n`;
+          
+          // Append selected text with separator and context header
+          const newContent = existingContent + '\n\n' + contextHeader + selectedText;
+
+          // Write back to file
+          await fs.writeFile(targetFilePath, newContent);
+
+          // Open the target file
+          const openFileMode = cfg.get<string>('openFileMode', 'preview');
+          if (openFileMode === 'preview') {
+            await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(targetFilePath));
+          } else {
+            const document = await vscode.workspace.openTextDocument(vscode.Uri.file(targetFilePath));
+            await vscode.window.showTextDocument(document, { preview: false });
+          }
+
+        } catch (err) {
+          vscode.window.showErrorMessage(`Failed to append content to file: ${String(err)}`);
+        }
+      }
+
+    } catch (err) {
+      vscode.window.showErrorMessage(`Error copying selection to file: ${String(err)}`);
+    }
+  });
+  context.subscriptions.push(copySelectionToFileCmd);
+
   // Command to duplicate a file
   const duplicateCmd = vscode.commands.registerCommand('obsidianManager.duplicateItem', async (...args: any[]) => {
     const first = args && args[0];

@@ -154,6 +154,12 @@
 				"icon": "$(code)"
 			},
 			{
+				"command": "obsidianManager.copySelectionToFile",
+				"title": "Obsidian > Copy selection to another file",
+				"category": "Obsidian manager",
+				"icon": "$(file-add)"
+			},
+			{
 				"command": "obsidianManager.openFileFromView.context",
 				"title": "Open in Obsidian",
 				"category": "Obsidian manager",
@@ -324,6 +330,11 @@
 				{
 					"command": "obsidianManager.putInsideCodeblock",
 					"when": "resourceExtname == .md || editorLangId == markdown",
+					"group": "obsidian"
+				},
+				{
+					"command": "obsidianManager.copySelectionToFile",
+					"when": "resourceExtname == .md || editorLangId == markdown && editorHasSelection",
 					"group": "obsidian"
 				}
 			],
