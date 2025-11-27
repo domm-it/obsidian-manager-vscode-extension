@@ -405,6 +405,20 @@
 					],
 					"default": "preview",
 					"description": "How files should be opened: 'edit' mode for immediate editing or 'preview' mode for read-only viewing."
+				},
+				"obsidianManager.newFileOpenMode": {
+					"type": "string",
+					"enum": [
+						"edit",
+						"preview"
+					],
+					"default": "edit",
+					"description": "How newly created files should be opened: 'edit' for immediate editing or 'preview' for read-only viewing."
+				},
+				"obsidianManager.addTitleToNewFiles": {
+					"type": "boolean",
+					"default": true,
+					"description": "Automatically add an H1 title (based on filename) as the first line when creating new files."
 				}
 			}
 		},

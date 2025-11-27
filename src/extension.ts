@@ -7,6 +7,32 @@ import * as os from 'os';
 // Drag & Drop controller state (last dragged items). We'll record last dragged sources in memory
 let _lastDragged: any[] = [];
 
+// Helper function to create a new file with proper content and opening mode
+async function createAndOpenNewFile(filePath: string, baseFileName: string): Promise<void> {
+  const cfg = vscode.workspace.getConfiguration('obsidianManager');
+  const addTitle = cfg.get<boolean>('addTitleToNewFiles', true);
+  const newFileOpenMode = cfg.get<string>('newFileOpenMode', 'edit');
+  
+  // Determine content based on settings
+  let content = '';
+  if (addTitle) {
+    // Remove .md extension and use as title
+    const title = baseFileName.replace(/\.md$/, '');
+    content = `# ${title}\n\n`;
+  }
+  
+  // Create the file
+  await fs.writeFile(filePath, content);
+  
+  // Open the file based on newFileOpenMode setting
+  if (newFileOpenMode === 'edit') {
+    const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
+    await vscode.window.showTextDocument(document, { preview: false });
+  } else {
+    await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(filePath));
+  }
+}
+
 // Helper function to get all markdown files from the vault
 async function getAllMarkdownFiles(provider: ObsidianTreeProvider, vaultPath: string): Promise<any[]> {
   const allFiles: any[] = [];
@@ -286,15 +312,7 @@ export async function activate(context: vscode.ExtensionContext) {
     const fileName = name.endsWith('.md') ? name : `${name}.md`;
     const target = path.join(folderFs, fileName);
     try {
-      await fs.writeFile(target, '');
-      // Open the new file in editor
-      const openFileMode = cfg.get<string>('openFileMode', 'preview');
-      if (openFileMode === 'preview') {
-        await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(target));
-      } else {
-        const document = await vscode.workspace.openTextDocument(vscode.Uri.file(target));
-        await vscode.window.showTextDocument(document, { preview: false });
-      }
+      await createAndOpenNewFile(target, fileName);
       // Refresh provider so view updates
       try { await provider.refreshAll(); } catch (e) { provider.refresh(); }
     } catch (err) {
@@ -957,18 +975,8 @@ export async function activate(context: vscode.ExtensionContext) {
                 const fullFileName = `${fileName.trim()}.md`;
                 const filePath = path.join(folderPath, fullFileName);
                 
-                // Create file with basic daily note template
-                const content = `# ${fileName.trim()}\n\n`;
-                await fs.writeFile(filePath, content, 'utf8');
-                
-                // Open the newly created file
-                const openFileMode = cfg.get<string>('openFileMode', 'preview');
-                if (openFileMode === 'preview') {
-                  await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(filePath));
-                } else {
-                  const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
-                  await vscode.window.showTextDocument(document, { preview: false });
-                }
+                // Create and open the file
+                await createAndOpenNewFile(filePath, fullFileName);
                 
                 // Refresh the tree view to show the new file
                 vscode.commands.executeCommand('obsidianManager.refreshView');
@@ -1454,10 +1462,18 @@ export async function activate(context: vscode.ExtensionContext) {
       return;
     }
 
+    // Generate today's date in YYYY-MM-DD format as default
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const todayString = `${year}-${month}-${day}`;
+
     // Prompt for filename
     const name = await vscode.window.showInputBox({ 
       prompt: 'New note name (without extension)', 
-      placeHolder: 'my-note' 
+      value: todayString,
+      placeHolder: 'YYYY-MM-DD'
     });
     if (!name) return;
     
@@ -1474,16 +1490,7 @@ export async function activate(context: vscode.ExtensionContext) {
         // File doesn't exist, proceed to create it
       }
       
-      await fs.writeFile(target, '');
-      
-      // Open the new file in editor
-      const openFileMode = cfg.get<string>('openFileMode', 'preview');
-      if (openFileMode === 'preview') {
-        await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(target));
-      } else {
-        const document = await vscode.workspace.openTextDocument(vscode.Uri.file(target));
-        await vscode.window.showTextDocument(document, { preview: false });
-      }
+      await createAndOpenNewFile(target, fileName);
       
       // Refresh provider so view updates
       try { await provider.refreshAll(); } catch (e) { provider.refresh(); }
@@ -1700,18 +1707,8 @@ export async function activate(context: vscode.ExtensionContext) {
         // File doesn't exist, proceed to create it
       }
       
-      // Create file with basic content
-      const content = `# ${fileName.trim()}\n\n`;
-      await fs.writeFile(targetPath, content);
-      
-      // Open the new file in editor
-      const openFileMode = cfg.get<string>('openFileMode', 'preview');
-      if (openFileMode === 'preview') {
-        await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(targetPath));
-      } else {
-        const document = await vscode.workspace.openTextDocument(vscode.Uri.file(targetPath));
-        await vscode.window.showTextDocument(document, { preview: false });
-      }
+      // Create and open the file
+      await createAndOpenNewFile(targetPath, fullFileName);
       
       // Refresh provider so view updates
       try { await provider.refreshAll(); } catch (e) { provider.refresh(); }
