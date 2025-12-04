@@ -226,7 +226,7 @@ export class ObsidianTreeProvider implements vscode.TreeDataProvider<ObsidianNod
       const matches = content.match(taskRegex) || [];
       
       const total = matches.length;
-      const completed = matches.filter(match => match.includes('[x]') || match.includes('[X]')).length;
+      const completed = matches.filter((match: string) => match.includes('[x]') || match.includes('[X]')).length;
       
       // Cache the result
       this.taskCache.set(filePath, { completed, total, lastModified });

@@ -242,6 +242,11 @@
 				"title": "Open in Preview Mode",
 				"category": "Obsidian manager",
 				"icon": "$(preview)"
+			},
+			{
+				"command": "obsidianManager.openWikiLink",
+				"title": "Open Wiki Link",
+				"category": "Obsidian manager"
 			}
 		],
 		"menus": {

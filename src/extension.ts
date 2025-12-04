@@ -330,6 +330,87 @@ class ObsidianDragAndDropController implements vscode.TreeDragAndDropController<
   }
 }
 
+// Wiki-link document link provider for Cmd+Click functionality in editor
+class WikiLinkProvider implements vscode.DocumentLinkProvider {
+  provideDocumentLinks(document: vscode.TextDocument): vscode.DocumentLink[] {
+    const links: vscode.DocumentLink[] = [];
+    const text = document.getText();
+    
+    // Regex to find wiki-links [[text]]
+    const wikiLinkRegex = /\[\[([^\]]+)\]\]/g;
+    let match;
+    
+    while ((match = wikiLinkRegex.exec(text)) !== null) {
+      const linkText = match[1];
+      const startPos = document.positionAt(match.index);
+      const endPos = document.positionAt(match.index + match[0].length);
+      
+      // Extract target (handle piped links)
+      let target = linkText;
+      if (linkText.includes('|')) {
+        target = linkText.split('|')[0].trim();
+      }
+      
+      // Create URI for the direct command (no dialogs)
+      const uri = vscode.Uri.parse(`command:obsidianManager.openWikiLinkDirect?${encodeURIComponent(JSON.stringify([target, false]))}`);
+      
+      const documentLink = new vscode.DocumentLink(
+        new vscode.Range(startPos, endPos),
+        uri
+      );
+      
+      documentLink.tooltip = `Click to open "${target}"`;
+      links.push(documentLink);
+    }
+    
+    return links;
+  }
+}
+
+// Hover provider to show "Open link" tooltip
+class WikiHoverProvider implements vscode.HoverProvider {
+  provideHover(document: vscode.TextDocument, position: vscode.Position): vscode.Hover | undefined {
+    const line = document.lineAt(position.line);
+    const text = line.text;
+    
+    // Find wiki-links on the current line
+    const wikiLinkRegex = /\[\[([^\]]+)\]\]/g;
+    let match;
+    
+    while ((match = wikiLinkRegex.exec(text)) !== null) {
+      const startCol = match.index;
+      const endCol = match.index + match[0].length;
+      
+      // Check if cursor is within this wiki-link
+      if (position.character >= startCol && position.character <= endCol) {
+        const linkText = match[1];
+        let target = linkText;
+        
+        // Handle piped links
+        if (linkText.includes('|')) {
+          const parts = linkText.split('|');
+          target = parts[0].trim();
+        }
+        
+        const range = new vscode.Range(
+          new vscode.Position(position.line, startCol),
+          new vscode.Position(position.line, endCol)
+        );
+        
+        const markdown = new vscode.MarkdownString();
+        markdown.isTrusted = true;
+        markdown.supportHtml = true;
+        markdown.appendMarkdown(`**Wiki-link**: \`${target}\`\n\n`);
+        markdown.appendMarkdown(`*Click to open | Cmd+Click for new tab*`);
+        
+        return new vscode.Hover(markdown, range);
+      }
+    }
+    
+    return undefined;
+  }
+}
+
 export async function activate(context: vscode.ExtensionContext) {
   const openHandler = async (args: any) => {
     // Prefer a URI passed by the command (e.g., from a menu on a resource). Fallback to active editor.
@@ -2246,6 +2327,153 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   });
   context.subscriptions.push(openInPreviewModeCmd);
+
+  // Command to open a wiki-link target
+  const openWikiLinkCmd = vscode.commands.registerCommand('obsidianManager.openWikiLink', async (target: string, openInNewTab: boolean = false) => {
+    if (!target) {
+      vscode.window.showErrorMessage('No wiki-link target specified.');
+      return;
+    }
+
+    const cfg = vscode.workspace.getConfiguration('obsidianManager');
+    const configuredVault = ((cfg.get<string>('vault') || '')).trim();
+    if (!configuredVault) {
+      vscode.window.showErrorMessage('Please configure the obsidianManager.vault setting first.');
+      return;
+    }
+
+    try {
+      // Clean up the target - remove extensions, handle different formats
+      let cleanTarget = target.trim();
+      
+      // Remove .md extension if present
+      if (cleanTarget.endsWith('.md')) {
+        cleanTarget = cleanTarget.slice(0, -3);
+      }
+      
+      // Handle [[wiki-link]] format
+      if (cleanTarget.startsWith('[[') && cleanTarget.endsWith(']]')) {
+        cleanTarget = cleanTarget.slice(2, -2);
+      }
+      
+      // Handle piped links [[file|description]] - take the file part
+      if (cleanTarget.includes('|')) {
+        cleanTarget = cleanTarget.split('|')[0].trim();
+      }
+      
+      // Search for the file in the vault
+      const searchPattern = `**/${cleanTarget}.md`;
+      const files = await vscode.workspace.findFiles(searchPattern);
+      
+      if (files.length > 0) {
+        // If multiple files found, prefer files in vault
+        let targetFile = files[0];
+        for (const file of files) {
+          if (file.fsPath.startsWith(configuredVault)) {
+            targetFile = file;
+            break;
+          }
+        }
+        
+        // Open the file
+        const openFileMode = cfg.get<string>('openFileMode', 'preview');
+        if (openFileMode === 'preview') {
+          await vscode.commands.executeCommand('markdown.showPreview', targetFile);
+        } else {
+          const document = await vscode.workspace.openTextDocument(targetFile);
+          await vscode.window.showTextDocument(document, { 
+            preview: false,
+            viewColumn: openInNewTab ? vscode.ViewColumn.Beside : undefined
+          });
+        }
+      } else {
+        // File not found - offer to create it
+        const choice = await vscode.window.showInformationMessage(
+          `File "${cleanTarget}.md" not found. Create it?`,
+          'Create File',
+          'Cancel'
+        );
+        
+        if (choice === 'Create File') {
+          const newFilePath = path.join(configuredVault, `${cleanTarget}.md`);
+          await createAndOpenNewFile(newFilePath, `${cleanTarget}.md`);
+          
+          // Refresh provider
+          try { await provider.refreshAll(); } catch (e) { provider.refresh(); }
+        }
+      }
+    } catch (err) {
+      vscode.window.showErrorMessage(`Error opening wiki-link: ${String(err)}`);
+    }
+  });
+
+  // Direct wiki-link command (no toast dialogs) for tooltip links
+  const openWikiLinkDirectCmd = vscode.commands.registerCommand('obsidianManager.openWikiLinkDirect', async (target: string, openInNewTab: boolean = false) => {
+    if (!target) return;
+
+    const cfg = vscode.workspace.getConfiguration('obsidianManager');
+    const configuredVault = ((cfg.get<string>('vault') || '')).trim();
+    if (!configuredVault) return;
+
+    try {
+      // Clean up the target - same logic as main command
+      let cleanTarget = target.trim();
+      if (cleanTarget.endsWith('.md')) {
+        cleanTarget = cleanTarget.slice(0, -3);
+      }
+      if (cleanTarget.startsWith('[[') && cleanTarget.endsWith(']]')) {
+        cleanTarget = cleanTarget.slice(2, -2);
+      }
+      if (cleanTarget.includes('|')) {
+        cleanTarget = cleanTarget.split('|')[0].trim();
+      }
+      
+      const searchPattern = `**/${cleanTarget}.md`;
+      const files = await vscode.workspace.findFiles(searchPattern);
+      
+      if (files.length > 0) {
+        let targetFile = files[0];
+        for (const file of files) {
+          if (file.fsPath.startsWith(configuredVault)) {
+            targetFile = file;
+            break;
+          }
+        }
+        
+        const openFileMode = cfg.get<string>('openFileMode', 'preview');
+        if (openFileMode === 'preview') {
+          await vscode.commands.executeCommand('markdown.showPreview', targetFile);
+        } else {
+          const document = await vscode.workspace.openTextDocument(targetFile);
+          await vscode.window.showTextDocument(document, { 
+            preview: false,
+            viewColumn: openInNewTab ? vscode.ViewColumn.Beside : undefined
+          });
+        }
+      }
+      // File not found - do nothing (removed file creation)
+    } catch (err) {
+      // Silent error handling
+    }
+  });
+  
+  context.subscriptions.push(openWikiLinkCmd);
+  context.subscriptions.push(openWikiLinkDirectCmd);
+
+  // Register wiki-link providers for markdown editor
+  const wikiLinkProvider = new WikiLinkProvider();
+  const wikiHoverProvider = new WikiHoverProvider();
+  
+  context.subscriptions.push(
+    vscode.languages.registerDocumentLinkProvider(
+      { scheme: 'file', language: 'markdown' },
+      wikiLinkProvider
+    ),
+    vscode.languages.registerHoverProvider(
+      { scheme: 'file', language: 'markdown' },
+      wikiHoverProvider
+    )
+  );
 
   // Register context menu aliases (without numbers) that call the original commands
   const contextAliases = [
