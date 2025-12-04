@@ -1994,6 +1994,27 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   context.subscriptions.push(createTodayFileInFolderCmd);
 
+  // Command to reveal file/folder in system file manager
+  const revealInFinderCmd = vscode.commands.registerCommand('obsidianManager.revealInFinder', async (...args: any[]) => {
+    const first = args && args[0];
+    let node = undefined as any;
+    if (first instanceof vscode.Uri) node = { resourceUri: first, isDirectory: false };
+    else if (first && typeof first === 'object') node = first;
+    
+    if (!node || !node.resourceUri) {
+      vscode.window.showErrorMessage('No file or folder selected to reveal.');
+      return;
+    }
+
+    try {
+      const itemPath = node.resourceUri.fsPath;
+      await vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(itemPath));
+    } catch (err) {
+      vscode.window.showErrorMessage(`Failed to reveal item: ${String(err)}`);
+    }
+  });
+  context.subscriptions.push(revealInFinderCmd);
+
   // Register context menu aliases (without numbers) that call the original commands
   const contextAliases = [
     { alias: 'obsidianManager.openFileFromView.context', original: 'obsidianManager.openFileFromView' },

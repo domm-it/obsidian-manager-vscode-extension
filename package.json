@@ -224,6 +224,12 @@
 				"title": "New note in root",
 				"category": "Obsidian manager",
 				"icon": "$(new-file)"
+			},
+			{
+				"command": "obsidianManager.revealInFinder",
+				"title": "Reveal in Finder",
+				"category": "Obsidian manager",
+				"icon": "$(folder-opened)"
 			}
 		],
 		"menus": {
@@ -314,6 +320,11 @@
 					"command": "obsidianManager.deleteItem.context",
 					"when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
 					"group": "5_delete"
+				},
+				{
+					"command": "obsidianManager.revealInFinder",
+					"when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
+					"group": "6_reveal"
 				}
 			],
 			"editor/context": [
