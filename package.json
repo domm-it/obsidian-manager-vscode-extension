@@ -332,29 +332,24 @@
 					"group": "1_open"
 				},
 				{
-					"command": "obsidianManager.revealInFinder",
-					"when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
-					"group": "1_open"
-				},
-				{
 					"command": "obsidianManager.createFileInFolder.context",
 					"when": "view == obsidianFiles && viewItem == obsidianFolder",
-					"group": "2_create"
+					"group": "1_create"
 				},
 				{
 					"command": "obsidianManager.createFolder.context",
 					"when": "view == obsidianFiles && viewItem == obsidianFolder",
-					"group": "2_create"
-				},
-				{
-					"command": "obsidianManager.createTodayFileInFolder",
-					"when": "view == obsidianFiles && viewItem == obsidianFolder",
-					"group": "2_create"
+					"group": "1_create"
 				},
 				{
 					"command": "obsidianManager.createTodayNote.context",
 					"when": "view == obsidianFiles && viewItem == obsidianFolder",
-					"group": "2_create"
+					"group": "2_calendar"
+				},
+				{
+					"command": "obsidianManager.revealInFinder",
+					"when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
+					"group": "2_calendar"
 				},
 				{
 					"command": "obsidianManager.renameItem.context",
