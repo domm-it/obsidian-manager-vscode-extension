@@ -288,32 +288,32 @@
 			"view/item/context": [
 				{
 					"command": "obsidianManager.createFileInFolder",
-					"when": "view == obsidianFiles && viewItem == obsidianFolder",
+					"when": "view == obsidianFiles && viewItem == obsidianFolder && config.obsidianManager.showFolderIcons",
 					"group": "inline"
 				},
 				{
 					"command": "obsidianManager.createFolder",
-					"when": "view == obsidianFiles && viewItem == obsidianFolder",
+					"when": "view == obsidianFiles && viewItem == obsidianFolder && config.obsidianManager.showFolderIcons",
 					"group": "inline"
 				},
 				{
 					"command": "obsidianManager.openInEditMode",
-					"when": "view == obsidianFiles && viewItem == obsidianFile",
+					"when": "view == obsidianFiles && viewItem == obsidianFile && config.obsidianManager.showFileIcons",
 					"group": "inline"
 				},
 				{
 					"command": "obsidianManager.openInPreviewMode",
-					"when": "view == obsidianFiles && viewItem == obsidianFile",
+					"when": "view == obsidianFiles && viewItem == obsidianFile && config.obsidianManager.showFileIcons",
 					"group": "inline"
 				},
 				{
 					"command": "obsidianManager.deleteItem",
-					"when": "view == obsidianFiles && viewItem == obsidianFile",
+					"when": "view == obsidianFiles && viewItem == obsidianFile && config.obsidianManager.showFileIcons",
 					"group": "inline"
 				},
 				{
 					"command": "obsidianManager.deleteItem",
-					"when": "view == obsidianFiles && viewItem == obsidianFolder",
+					"when": "view == obsidianFiles && viewItem == obsidianFolder && config.obsidianManager.showFolderIcons",
 					"group": "inline"
 				},
 				{
@@ -447,10 +447,15 @@
 					"default": true,
 					"description": "If true the folders in the Obsidian view will be expanded by default when the view is shown."
 				},
-				"obsidianManager.showIcons": {
+				"obsidianManager.showFileIcons": {
 					"type": "boolean",
 					"default": true,
-					"description": "Show icons next to files and folders in the Obsidian sidebar view. Set to false to hide icons for a compact list."
+					"description": "Show inline action icons next to files in the Obsidian sidebar view (Edit Mode, Preview Mode, Delete)."
+				},
+				"obsidianManager.showFolderIcons": {
+					"type": "boolean",
+					"default": true,
+					"description": "Show inline action icons next to folders in the Obsidian sidebar view (Create File, Create Folder, Delete)."
 				},
 				"obsidianManager.viewMode": {
 					"type": "string",
