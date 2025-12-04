@@ -7,6 +7,13 @@ import * as os from 'os';
 // Drag & Drop controller state (last dragged items). We'll record last dragged sources in memory
 let _lastDragged: any[] = [];
 
+// Helper function to safely show markdown preview by preloading the document first
+async function showMarkdownPreviewSafe(uri: vscode.Uri): Promise<void> {
+  // Preload document to prevent empty preview
+  await vscode.workspace.openTextDocument(uri);
+  await vscode.commands.executeCommand('markdown.showPreview', uri);
+}
+
 // Helper function to create a new file with proper content and opening mode
 async function createAndOpenNewFile(filePath: string, baseFileName: string): Promise<void> {
   const cfg = vscode.workspace.getConfiguration('obsidianManager');
@@ -29,7 +36,7 @@ async function createAndOpenNewFile(filePath: string, baseFileName: string): Pro
     const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
     await vscode.window.showTextDocument(document, { preview: false });
   } else {
-    await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(filePath));
+    await showMarkdownPreviewSafe(vscode.Uri.file(filePath));
   }
 }
 
@@ -152,7 +159,7 @@ class ObsidianDragAndDropController implements vscode.TreeDragAndDropController<
             const cfg = vscode.workspace.getConfiguration('obsidianManager');
             const openFileMode = cfg.get<string>('openFileMode', 'preview');
             if (openFileMode === 'preview') {
-              await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(destPath));
+              await showMarkdownPreviewSafe(vscode.Uri.file(destPath));
             } else {
               const document = await vscode.workspace.openTextDocument(vscode.Uri.file(destPath));
               await vscode.window.showTextDocument(document, { preview: false });
@@ -496,7 +503,7 @@ export async function activate(context: vscode.ExtensionContext) {
     
     if (openFileMode === 'preview') {
       // Open in preview mode (read-only)
-      await vscode.commands.executeCommand('markdown.showPreview', uri);
+      await showMarkdownPreviewSafe(uri);
     } else {
       // Open in edit mode
       const document = await vscode.workspace.openTextDocument(uri);
@@ -661,7 +668,7 @@ export async function activate(context: vscode.ExtensionContext) {
           const cfg = vscode.workspace.getConfiguration('obsidianManager');
           const openFileMode = cfg.get<string>('openFileMode', 'preview');
           if (openFileMode === 'preview') {
-            await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(newPath));
+            await showMarkdownPreviewSafe(vscode.Uri.file(newPath));
           } else {
             const document = await vscode.workspace.openTextDocument(vscode.Uri.file(newPath));
             await vscode.window.showTextDocument(document, { preview: false });
@@ -1265,7 +1272,7 @@ export async function activate(context: vscode.ExtensionContext) {
             // Open the selected file
             const openFileMode = cfg.get<string>('openFileMode', 'preview');
             if (openFileMode === 'preview') {
-              await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(selectedFilePath));
+              await showMarkdownPreviewSafe(vscode.Uri.file(selectedFilePath));
             } else {
               const document = await vscode.workspace.openTextDocument(vscode.Uri.file(selectedFilePath));
               await vscode.window.showTextDocument(document, { preview: false });
@@ -1575,7 +1582,7 @@ export async function activate(context: vscode.ExtensionContext) {
       const cfg = vscode.workspace.getConfiguration('obsidianManager');
       const openFileMode = cfg.get<string>('openFileMode', 'preview');
       if (openFileMode === 'preview') {
-        await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(targetPath));
+        await showMarkdownPreviewSafe(vscode.Uri.file(targetPath));
       } else {
         const newDocument = await vscode.workspace.openTextDocument(vscode.Uri.file(targetPath));
         await vscode.window.showTextDocument(newDocument, { preview: false });
@@ -1886,7 +1893,7 @@ export async function activate(context: vscode.ExtensionContext) {
             const document = await vscode.workspace.openTextDocument(vscode.Uri.file(newFilePath));
             await vscode.window.showTextDocument(document, { preview: false });
           } else {
-            await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(newFilePath));
+            await showMarkdownPreviewSafe(vscode.Uri.file(newFilePath));
           }
 
           // Refresh provider
@@ -1919,7 +1926,7 @@ export async function activate(context: vscode.ExtensionContext) {
           // Open the target file
           const openFileMode = cfg.get<string>('openFileMode', 'preview');
           if (openFileMode === 'preview') {
-            await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(targetFilePath));
+            await showMarkdownPreviewSafe(vscode.Uri.file(targetFilePath));
           } else {
             const document = await vscode.workspace.openTextDocument(vscode.Uri.file(targetFilePath));
             await vscode.window.showTextDocument(document, { preview: false });
@@ -1987,7 +1994,7 @@ export async function activate(context: vscode.ExtensionContext) {
       const cfg = vscode.workspace.getConfiguration('obsidianManager');
       const openFileMode = cfg.get<string>('openFileMode', 'preview');
       if (openFileMode === 'preview') {
-        await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(targetPath));
+        await showMarkdownPreviewSafe(vscode.Uri.file(targetPath));
       } else {
         const document = await vscode.workspace.openTextDocument(vscode.Uri.file(targetPath));
         await vscode.window.showTextDocument(document, { preview: false });
@@ -2220,7 +2227,7 @@ export async function activate(context: vscode.ExtensionContext) {
         // Open the new file in editor
         const openFileMode = cfg.get<string>('openFileMode', 'preview');
         if (openFileMode === 'preview') {
-          await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(targetPath));
+          await showMarkdownPreviewSafe(vscode.Uri.file(targetPath));
         } else {
           const document = await vscode.workspace.openTextDocument(vscode.Uri.file(targetPath));
           await vscode.window.showTextDocument(document, { preview: false });
@@ -2389,7 +2396,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     try {
       if (uri.fsPath.toLowerCase().endsWith('.md')) {
-        await vscode.commands.executeCommand('markdown.showPreview', uri);
+        await showMarkdownPreviewSafe(uri);
       } else {
         // For non-markdown files, open in read-only mode
         const document = await vscode.workspace.openTextDocument(uri);
@@ -2445,7 +2452,7 @@ export async function activate(context: vscode.ExtensionContext) {
           // File exists - open it
           const openFileMode = cfg.get<string>('openFileMode', 'preview');
           if (openFileMode === 'preview') {
-            await vscode.commands.executeCommand('markdown.showPreview', targetUri);
+            await showMarkdownPreviewSafe(targetUri);
           } else {
             const document = await vscode.workspace.openTextDocument(targetUri);
             await vscode.window.showTextDocument(document, { 
