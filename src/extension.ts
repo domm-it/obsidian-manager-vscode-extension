@@ -90,11 +90,25 @@ class ObsidianDragAndDropController implements vscode.TreeDragAndDropController<
     const sources = _lastDragged || [];
     _lastDragged = [];
     if (!sources || sources.length === 0) return;
+    
     // Determine destination folder
     let destFolder: string | undefined;
-    if (target && target.isDirectory) destFolder = target.resourceUri.fsPath;
-    else if (target && target.resourceUri) destFolder = path.dirname(target.resourceUri.fsPath);
-    // If no target folder, abort
+    if (target && target.isDirectory) {
+      destFolder = target.resourceUri.fsPath;
+    } else if (target && target.resourceUri) {
+      destFolder = path.dirname(target.resourceUri.fsPath);
+    } else if (!target) {
+      // Dropped onto root/empty space - move to vault root
+      const cfg = vscode.workspace.getConfiguration('obsidianManager');
+      const configuredVault = ((cfg.get<string>('vault') || '')).trim();
+      if (!configuredVault) {
+        vscode.window.showErrorMessage('Please configure the obsidianManager.vault setting first.');
+        return;
+      }
+      destFolder = configuredVault;
+    }
+    
+    // If no destination folder determined, abort
     if (!destFolder) return;
 
     for (const s of sources) {
