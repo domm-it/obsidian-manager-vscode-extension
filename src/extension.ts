@@ -323,20 +323,23 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Command to create a new folder at vault root
   const createFolderCmd = vscode.commands.registerCommand('obsidianManager.createFolder', async (...args: any[]) => {
+    const cfg = vscode.workspace.getConfiguration('obsidianManager');
+    const configuredVault = ((cfg.get<string>('vault') || '')).trim();
+    if (!configuredVault) {
+      vscode.window.showErrorMessage('Please configure the `obsidianManager.vault` setting with the vault path first.');
+      return;
+    }
+
     // If invoked with a folder node (from context menu), create under that folder; otherwise use vault root
     let parentFs: string | undefined;
     const first = args && args[0];
-    if (first instanceof vscode.Uri) parentFs = first.fsPath;
-    else if (first && typeof first === 'object') {
+    
+    // Only check for arguments if they exist - when called from view title, args will be empty
+    if (first instanceof vscode.Uri) {
+      parentFs = first.fsPath;
+    } else if (first && typeof first === 'object') {
       if ((first as any).resourceUri instanceof vscode.Uri) parentFs = (first as any).resourceUri.fsPath;
       else if ((first as any).uri instanceof vscode.Uri) parentFs = (first as any).uri.fsPath;
-    }
-
-  const cfg = vscode.workspace.getConfiguration('obsidianManager');
-  const configuredVault = ((cfg.get<string>('vault') || '')).trim();
-    if (!configuredVault) {
-  vscode.window.showErrorMessage('Please configure the `obsidianManager.vault` setting with the vault path first.');
-      return;
     }
 
     // If parentFs is provided and it's a file, use its directory
@@ -345,11 +348,12 @@ export async function activate(context: vscode.ExtensionContext) {
         const stat = await fs.lstat(parentFs);
         if (!stat.isDirectory()) parentFs = path.dirname(parentFs);
       } catch (e) {
-        // ignore and fallback to vault
+        // ignore and fallback to vault root
         parentFs = undefined;
       }
     }
 
+    // Always use vault root if no valid parent folder is found
     const baseFolder = parentFs || configuredVault;
     const name = await vscode.window.showInputBox({ prompt: 'New folder name', placeHolder: 'NewFolder' });
     if (!name) return;
