@@ -1517,6 +1517,79 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   context.subscriptions.push(linkDocumentCmd);
 
+  // Command to duplicate current active file from editor
+  const duplicateFromEditorCmd = vscode.commands.registerCommand('obsidianManager.duplicateFromEditor', async () => {
+    const activeEditor = vscode.window.activeTextEditor;
+    if (!activeEditor) {
+      vscode.window.showInformationMessage('No active file to duplicate');
+      return;
+    }
+
+    const document = activeEditor.document;
+    if (!document.fileName.endsWith('.md')) {
+      vscode.window.showInformationMessage('Duplicate command is only available for markdown files');
+      return;
+    }
+
+    const originalPath = document.fileName;
+    const originalDir = path.dirname(originalPath);
+    const originalExt = path.extname(originalPath);
+    const originalBaseName = path.basename(originalPath, originalExt);
+    
+    // Default new name with (copy) suffix
+    const defaultNewName = `${originalBaseName} (copy)${originalExt}`;
+    
+    // Show input dialog with default name
+    const newName = await vscode.window.showInputBox({ 
+      prompt: 'Enter name for duplicated file', 
+      value: defaultNewName,
+      validateInput: (input) => {
+        if (!input || input.trim() === '') {
+          return 'File name cannot be empty';
+        }
+        // Check if file already exists
+        const targetPath = path.join(originalDir, input);
+        try {
+          require('fs').accessSync(targetPath);
+          return 'A file with this name already exists';
+        } catch (e) {
+          return null; // File doesn't exist, name is valid
+        }
+      }
+    });
+    
+    if (!newName) return; // User cancelled
+    
+    const targetPath = path.join(originalDir, newName);
+    
+    try {
+      // Save current document if it has unsaved changes
+      if (document.isDirty) {
+        await document.save();
+      }
+      
+      // Copy the file
+      await fs.copyFile(originalPath, targetPath);
+      
+      // Open the duplicated file in editor
+      const cfg = vscode.workspace.getConfiguration('obsidianManager');
+      const openFileMode = cfg.get<string>('openFileMode', 'preview');
+      if (openFileMode === 'preview') {
+        await vscode.commands.executeCommand('markdown.showPreview', vscode.Uri.file(targetPath));
+      } else {
+        const newDocument = await vscode.workspace.openTextDocument(vscode.Uri.file(targetPath));
+        await vscode.window.showTextDocument(newDocument, { preview: false });
+      }
+      
+      // Refresh the tree view
+      try { await provider.refreshAll(); } catch (e) { provider.refresh(); }
+      
+    } catch (err) {
+      vscode.window.showErrorMessage(`Failed to duplicate file: ${String(err)}`);
+    }
+  });
+  context.subscriptions.push(duplicateFromEditorCmd);
+
   // Command to include clipboard content in a code block
   const includeClipboardCodeBlockCmd = vscode.commands.registerCommand('obsidianManager.includeClipboardCodeBlock', async () => {
     const editor = vscode.window.activeTextEditor;
