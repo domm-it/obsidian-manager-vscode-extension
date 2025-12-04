@@ -2401,6 +2401,18 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   context.subscriptions.push(openInPreviewModeCmd);
 
+  // Context menu commands for edit and preview mode
+  const openInEditModeContextCmd = vscode.commands.registerCommand('obsidianManager.openInEditMode.context', async (...args: any[]) => {
+    return vscode.commands.executeCommand('obsidianManager.openInEditMode', ...args);
+  });
+  
+  const openInPreviewModeContextCmd = vscode.commands.registerCommand('obsidianManager.openInPreviewMode.context', async (...args: any[]) => {
+    return vscode.commands.executeCommand('obsidianManager.openInPreviewMode', ...args);
+  });
+  
+  context.subscriptions.push(openInEditModeContextCmd);
+  context.subscriptions.push(openInPreviewModeContextCmd);
+
   // Wiki-link command (no dialogs, only opens existing files)
   const openWikiLinkDirectCmd = vscode.commands.registerCommand('obsidianManager.openWikiLinkDirect', async (target: string, openInNewTab: boolean = false) => {
     if (!target) return;

@@ -239,12 +239,24 @@
 			},
 			{
 				"command": "obsidianManager.openInEditMode",
-				"title": "Open in Edit Mode",
+				"title": "1 - Open in Edit Mode",
 				"category": "Obsidian manager",
 				"icon": "$(edit)"
 			},
 			{
 				"command": "obsidianManager.openInPreviewMode",
+				"title": "2 - Open in Preview Mode",
+				"category": "Obsidian manager",
+				"icon": "$(preview)"
+			},
+			{
+				"command": "obsidianManager.openInEditMode.context",
+				"title": "Open in Edit Mode",
+				"category": "Obsidian manager",
+				"icon": "$(edit)"
+			},
+			{
+				"command": "obsidianManager.openInPreviewMode.context",
 				"title": "Open in Preview Mode",
 				"category": "Obsidian manager",
 				"icon": "$(preview)"
@@ -285,11 +297,6 @@
 					"group": "inline"
 				},
 				{
-					"command": "obsidianManager.duplicateItem",
-					"when": "view == obsidianFiles && viewItem == obsidianFile",
-					"group": "inline"
-				},
-				{
 					"command": "obsidianManager.openInEditMode",
 					"when": "view == obsidianFiles && viewItem == obsidianFile",
 					"group": "inline"
@@ -300,14 +307,39 @@
 					"group": "inline"
 				},
 				{
+					"command": "obsidianManager.deleteItem",
+					"when": "view == obsidianFiles && viewItem == obsidianFile",
+					"group": "inline"
+				},
+				{
+					"command": "obsidianManager.deleteItem",
+					"when": "view == obsidianFiles && viewItem == obsidianFolder",
+					"group": "inline"
+				},
+				{
+					"command": "obsidianManager.openInEditMode.context",
+					"when": "view == obsidianFiles && viewItem == obsidianFile",
+					"group": "0_edit"
+				},
+				{
+					"command": "obsidianManager.openInPreviewMode.context",
+					"when": "view == obsidianFiles && viewItem == obsidianFile",
+					"group": "0_edit"
+				},
+				{
 					"command": "obsidianManager.openFileFromView.context",
 					"when": "view == obsidianFiles && viewItem == obsidianFile",
 					"group": "1_open"
 				},
 				{
+					"command": "obsidianManager.revealInFinder",
+					"when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
+					"group": "1_open"
+				},
+				{
 					"command": "obsidianManager.createFileInFolder.context",
 					"when": "view == obsidianFiles && viewItem == obsidianFolder",
-					"group": "1_create"
+					"group": "2_create"
 				},
 				{
 					"command": "obsidianManager.createFolder.context",
@@ -317,32 +349,27 @@
 				{
 					"command": "obsidianManager.createTodayFileInFolder",
 					"when": "view == obsidianFiles && viewItem == obsidianFolder",
-					"group": "3_today"
+					"group": "2_create"
 				},
 				{
 					"command": "obsidianManager.createTodayNote.context",
 					"when": "view == obsidianFiles && viewItem == obsidianFolder",
-					"group": "3_today"
+					"group": "2_create"
 				},
 				{
 					"command": "obsidianManager.renameItem.context",
 					"when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
-					"group": "3_modify"
+					"group": "3_modify@1"
 				},
 				{
 					"command": "obsidianManager.duplicateItem.context",
 					"when": "view == obsidianFiles && viewItem == obsidianFile",
-					"group": "4_duplicate"
+					"group": "3_modify@2"
 				},
 				{
 					"command": "obsidianManager.deleteItem.context",
 					"when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
-					"group": "5_delete"
-				},
-				{
-					"command": "obsidianManager.revealInFinder",
-					"when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
-					"group": "6_reveal"
+					"group": "3_modify@3"
 				}
 			],
 			"editor/context": [
