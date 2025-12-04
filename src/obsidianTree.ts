@@ -12,6 +12,7 @@ export class ObsidianTreeProvider implements vscode.TreeDataProvider<ObsidianNod
   readonly onDidChangeTreeData: vscode.Event<ObsidianNode | undefined | void> = this._onDidChangeTreeData.event;
 
   private cache: Map<string, ObsidianNode[]> = new Map();
+  private taskCache: Map<string, {completed: number, total: number, lastModified: number}> = new Map();
   private rootPath: string | undefined;
   private preloadPromise: Promise<void> | undefined;
 
@@ -29,11 +30,22 @@ export class ObsidianTreeProvider implements vscode.TreeDataProvider<ObsidianNod
   }
 
   refresh(): void {
+    // Clear task cache when refreshing to ensure task counts are updated
+    this.taskCache.clear();
     this._onDidChangeTreeData.fire();
   }
 
   getTreeItem(element: ObsidianNode): vscode.TreeItem {
-    const label = path.basename(element.resourceUri.fsPath);
+    let label = path.basename(element.resourceUri.fsPath);
+    
+    // Add task count for markdown files
+    if (!element.isDirectory && element.resourceUri.fsPath.toLowerCase().endsWith('.md')) {
+      const taskCount = this.getTaskCount(element.resourceUri.fsPath);
+      if (taskCount.total > 0) {
+        label = `${label} [${taskCount.completed}/${taskCount.total}]`;
+      }
+    }
+    
 	// Respect user setting whether folders should be expanded on load
     const cfg = vscode.workspace.getConfiguration('obsidianManager');
 	const expandOnLoad = cfg.get<boolean>('expandFoldersOnLoad', true);
@@ -158,6 +170,8 @@ export class ObsidianTreeProvider implements vscode.TreeDataProvider<ObsidianNod
   public async refreshAll(): Promise<void> {
     // Reset preloadPromise so ensurePreloaded will re-run preloadVault
     this.preloadPromise = undefined;
+    // Clear task cache to ensure fresh task counts
+    this.taskCache.clear();
     await this.ensurePreloaded();
     this.refresh();
   }
@@ -191,5 +205,36 @@ export class ObsidianTreeProvider implements vscode.TreeDataProvider<ObsidianNod
   private getIconForFile(fsPath: string): { light: vscode.Uri; dark: vscode.Uri } | undefined {
     const img = this.context.asAbsolutePath('images/obsidian.svg');
     return { light: vscode.Uri.file(img), dark: vscode.Uri.file(img) };
+  }
+
+  private getTaskCount(filePath: string): {completed: number, total: number} {
+    try {
+      // Check if we have cached task count and file hasn't been modified
+      const stat = require('fs').statSync(filePath);
+      const lastModified = stat.mtime.getTime();
+      
+      const cached = this.taskCache.get(filePath);
+      if (cached && cached.lastModified === lastModified) {
+        return { completed: cached.completed, total: cached.total };
+      }
+
+      // Read file and count tasks
+      const content = require('fs').readFileSync(filePath, 'utf8');
+      
+      // Match both - [ ] (uncompleted) and - [x] or - [X] (completed) tasks
+      const taskRegex = /^[\s]*[-*+]\s+\[(\s|x|X)\]/gm;
+      const matches = content.match(taskRegex) || [];
+      
+      const total = matches.length;
+      const completed = matches.filter(match => match.includes('[x]') || match.includes('[X]')).length;
+      
+      // Cache the result
+      this.taskCache.set(filePath, { completed, total, lastModified });
+      
+      return { completed, total };
+    } catch (err) {
+      // If file can't be read, return no tasks
+      return { completed: 0, total: 0 };
+    }
   }
 }

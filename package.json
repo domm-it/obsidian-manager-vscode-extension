@@ -230,6 +230,18 @@
 				"title": "Reveal in Finder",
 				"category": "Obsidian manager",
 				"icon": "$(folder-opened)"
+			},
+			{
+				"command": "obsidianManager.openInEditMode",
+				"title": "Open in Edit Mode",
+				"category": "Obsidian manager",
+				"icon": "$(edit)"
+			},
+			{
+				"command": "obsidianManager.openInPreviewMode",
+				"title": "Open in Preview Mode",
+				"category": "Obsidian manager",
+				"icon": "$(preview)"
 			}
 		],
 		"menus": {
@@ -246,11 +258,7 @@
 				}
 			],
 			"view/item/context": [
-				{
-					"command": "obsidianManager.openFileFromView",
-					"when": "view == obsidianFiles && viewItem == obsidianFile",
-					"group": "inline"
-				},
+
 				{
 					"command": "obsidianManager.createFileInFolder",
 					"when": "view == obsidianFiles && viewItem == obsidianFolder",
@@ -263,6 +271,16 @@
 				},
 				{
 					"command": "obsidianManager.duplicateItem",
+					"when": "view == obsidianFiles && viewItem == obsidianFile",
+					"group": "inline"
+				},
+				{
+					"command": "obsidianManager.openInEditMode",
+					"when": "view == obsidianFiles && viewItem == obsidianFile",
+					"group": "inline"
+				},
+				{
+					"command": "obsidianManager.openInPreviewMode",
 					"when": "view == obsidianFiles && viewItem == obsidianFile",
 					"group": "inline"
 				},

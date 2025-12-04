@@ -2184,6 +2184,69 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   context.subscriptions.push(revealInFinderCmd);
 
+  // Command to open file in edit mode
+  const openInEditModeCmd = vscode.commands.registerCommand('obsidianManager.openInEditMode', async (...args: any[]) => {
+    const first = args && args[0];
+    let uri: vscode.Uri | undefined;
+    
+    if (first instanceof vscode.Uri) uri = first;
+    else if (first && typeof first === 'object') {
+      if ((first as any).resourceUri instanceof vscode.Uri) uri = (first as any).resourceUri;
+      else if ((first as any).uri instanceof vscode.Uri) uri = (first as any).uri;
+    }
+
+    if (!uri && vscode.window.activeTextEditor) {
+      uri = vscode.window.activeTextEditor.document.uri;
+    }
+
+    if (!uri) {
+      vscode.window.showErrorMessage('No file available to open in edit mode.');
+      return;
+    }
+
+    try {
+      const document = await vscode.workspace.openTextDocument(uri);
+      await vscode.window.showTextDocument(document, { preview: false });
+    } catch (err) {
+      vscode.window.showErrorMessage(`Failed to open file in edit mode: ${String(err)}`);
+    }
+  });
+  context.subscriptions.push(openInEditModeCmd);
+
+  // Command to open file in preview mode
+  const openInPreviewModeCmd = vscode.commands.registerCommand('obsidianManager.openInPreviewMode', async (...args: any[]) => {
+    const first = args && args[0];
+    let uri: vscode.Uri | undefined;
+    
+    if (first instanceof vscode.Uri) uri = first;
+    else if (first && typeof first === 'object') {
+      if ((first as any).resourceUri instanceof vscode.Uri) uri = (first as any).resourceUri;
+      else if ((first as any).uri instanceof vscode.Uri) uri = (first as any).uri;
+    }
+
+    if (!uri && vscode.window.activeTextEditor) {
+      uri = vscode.window.activeTextEditor.document.uri;
+    }
+
+    if (!uri) {
+      vscode.window.showErrorMessage('No file available to open in preview mode.');
+      return;
+    }
+
+    try {
+      if (uri.fsPath.toLowerCase().endsWith('.md')) {
+        await vscode.commands.executeCommand('markdown.showPreview', uri);
+      } else {
+        // For non-markdown files, open in read-only mode
+        const document = await vscode.workspace.openTextDocument(uri);
+        await vscode.window.showTextDocument(document, { preview: true });
+      }
+    } catch (err) {
+      vscode.window.showErrorMessage(`Failed to open file in preview mode: ${String(err)}`);
+    }
+  });
+  context.subscriptions.push(openInPreviewModeCmd);
+
   // Register context menu aliases (without numbers) that call the original commands
   const contextAliases = [
     { alias: 'obsidianManager.openFileFromView.context', original: 'obsidianManager.openFileFromView' },
