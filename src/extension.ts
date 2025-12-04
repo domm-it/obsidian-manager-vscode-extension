@@ -2529,6 +2529,38 @@ export async function activate(context: vscode.ExtensionContext) {
     });
     context.subscriptions.push(aliasCmd);
   }
+
+  // Listen for file save events to refresh the vault tree and calendar
+  const saveListener = vscode.workspace.onDidSaveTextDocument(async (document) => {
+    const cfg = vscode.workspace.getConfiguration('obsidianManager');
+    const vault = cfg.get<string>('vault') || '';
+    
+    if (vault && document.uri.scheme === 'file') {
+      const documentPath = document.uri.fsPath;
+      const vaultPath = vault.replace(/^~/, require('os').homedir());
+      
+      // Check if the saved file is within the configured vault
+      if (documentPath.startsWith(vaultPath)) {
+        // Refresh the vault tree
+        try {
+          await provider.refreshAll();
+        } catch (e) {
+          provider.refresh();
+        }
+        
+        // Refresh calendar if it's a markdown file and might be a daily note
+        if (documentPath.toLowerCase().endsWith('.md')) {
+          try {
+            await vscode.commands.executeCommand('obsidianManager.refreshCalendar');
+          } catch (e) {
+            // Calendar command might not be available, ignore error
+          }
+        }
+      }
+    }
+  });
+  
+  context.subscriptions.push(saveListener);
 }
 
 export function deactivate() {}

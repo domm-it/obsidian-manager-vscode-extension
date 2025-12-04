@@ -1,6 +1,12 @@
 // Add copy buttons to code blocks in markdown preview
 (function() {
     'use strict';
+    
+    // Catch any uncaught errors to prevent breaking the preview
+    window.addEventListener('error', function(e) {
+        console.warn('JavaScript error in markdown preview:', e.error);
+        return true; // Prevent default error handling
+    });
 
 
 
@@ -82,8 +88,18 @@
     }
 
     function addCopyButtonsToCodeBlocks() {
-        const preElements = document.querySelectorAll('pre');
-        preElements.forEach(addCopyButton);
+        try {
+            const preElements = document.querySelectorAll('pre');
+            preElements.forEach((preElement) => {
+                try {
+                    addCopyButton(preElement);
+                } catch (e) {
+                    console.warn('Error adding copy button to element:', e);
+                }
+            });
+        } catch (e) {
+            console.warn('Error in addCopyButtonsToCodeBlocks:', e);
+        }
     }
 
     // Add copy buttons when DOM is ready
@@ -94,14 +110,20 @@
     }
 
     // Re-add copy buttons when content changes (for dynamic updates)
+    let debounceTimeout;
     const observer = new MutationObserver((mutations) => {
         let shouldUpdate = false;
         
+        // Clear existing timeout
+        if (debounceTimeout) {
+            clearTimeout(debounceTimeout);
+        }
+        
         mutations.forEach((mutation) => {
-            if (mutation.type === 'childList') {
+            if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
                 mutation.addedNodes.forEach((node) => {
                     if (node.nodeType === 1) { // Element node
-                        if (node.tagName === 'PRE' || node.querySelector && node.querySelector('pre')) {
+                        if (node.tagName === 'PRE' || (node.querySelector && node.querySelector('pre'))) {
                             shouldUpdate = true;
                         }
                     }
@@ -110,16 +132,28 @@
         });
         
         if (shouldUpdate) {
-            // Debounce the update
-            setTimeout(addCopyButtonsToCodeBlocks, 100);
+            // Debounce the update to avoid excessive calls
+            debounceTimeout = setTimeout(() => {
+                try {
+                    addCopyButtonsToCodeBlocks();
+                } catch (e) {
+                    console.warn('Error adding copy buttons:', e);
+                }
+            }, 200);
         }
     });
 
-    // Start observing
-    observer.observe(document.body, {
-        childList: true,
-        subtree: true
-    });
+    // Start observing with more specific options to reduce noise
+    try {
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: false,
+            characterData: false
+        });
+    } catch (e) {
+        console.warn('Could not start MutationObserver:', e);
+    }
 
     // Wiki-link functionality - use global API or acquire if not available
     let vscodeApi = window.vscodeApi;
