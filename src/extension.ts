@@ -9,9 +9,35 @@ let _lastDragged: any[] = [];
 
 // Helper function to safely show markdown preview by preloading the document first
 async function showMarkdownPreviewSafe(uri: vscode.Uri): Promise<void> {
-  // Preload document to prevent empty preview
-  await vscode.workspace.openTextDocument(uri);
-  await vscode.commands.executeCommand('markdown.showPreview', uri);
+  try {
+    // Preload document to ensure it's in VS Code's document cache
+    const document = await vscode.workspace.openTextDocument(uri);
+    
+    // Wait for document content to be available with exponential backoff
+    let attempts = 0;
+    const maxAttempts = 3;
+    while (attempts < maxAttempts) {
+      if (document.getText().length > 0 || attempts === maxAttempts - 1) {
+        break;
+      }
+      // Short delays: 25ms, 50ms, 100ms
+      const delay = 25 * Math.pow(2, attempts);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      attempts++;
+    }
+    
+    // Short delay to ensure document is fully processed
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
+    // Show markdown preview directly
+    await vscode.commands.executeCommand('markdown.showPreview', uri);
+    
+  } catch (error) {
+    // Fallback to regular file opening if preview fails
+    console.error('Failed to show markdown preview:', error);
+    const document = await vscode.workspace.openTextDocument(uri);
+    await vscode.window.showTextDocument(document, { preview: true });
+  }
 }
 
 // Helper function to create a new file with proper content and opening mode
