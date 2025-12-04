@@ -463,14 +463,32 @@
 			},
 			{
 				"command": "obsidianManager.putInsideCodeblock",
-				"key": "ctrl+shift+c",
-				"mac": "ctrl+shift+c",
+				"key": "ctrl+x",
+				"mac": "ctrl+x",
 				"when": "editorTextFocus && resourceExtname == .md"
 			},
 			{
 				"command": "obsidianManager.pasteAsLink",
 				"key": "ctrl+v",
 				"mac": "ctrl+v",
+				"when": "editorTextFocus && resourceExtname == .md"
+			},
+			{
+				"command": "editor.action.insertSnippet",
+				"args": {
+					"snippet": "**${TM_SELECTED_TEXT:$1}**$0"
+				},
+				"key": "ctrl+b",
+				"mac": "cmd+b",
+				"when": "editorTextFocus && resourceExtname == .md"
+			},
+			{
+				"command": "editor.action.insertSnippet",
+				"args": {
+					"snippet": "*${TM_SELECTED_TEXT:$1}*$0"
+				},
+				"key": "ctrl+i",
+				"mac": "cmd+i",
 				"when": "editorTextFocus && resourceExtname == .md"
 			}
 		],
