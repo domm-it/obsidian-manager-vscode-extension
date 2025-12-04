@@ -257,28 +257,13 @@
 					"group": "inline"
 				},
 				{
-					"command": "obsidianManager.createTodayNote",
-					"when": "view == obsidianFiles && viewItem == obsidianFolder",
-					"group": "inline"
-				},
-				{
 					"command": "obsidianManager.createFolder",
 					"when": "view == obsidianFiles && viewItem == obsidianFolder",
 					"group": "inline"
 				},
 				{
-					"command": "obsidianManager.renameItem",
-					"when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
-					"group": "inline"
-				},
-				{
 					"command": "obsidianManager.duplicateItem",
 					"when": "view == obsidianFiles && viewItem == obsidianFile",
-					"group": "inline"
-				},
-				{
-					"command": "obsidianManager.deleteItem",
-					"when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
 					"group": "inline"
 				},
 				{
