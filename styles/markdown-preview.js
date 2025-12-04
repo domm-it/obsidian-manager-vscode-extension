@@ -208,9 +208,9 @@
                             e.preventDefault();
                             const openInNewTab = e.ctrlKey || e.metaKey; // Ctrl+click or Cmd+click for new tab
                             vscodeApi.postMessage({
-                                command: 'openWikiLink',
+                                command: 'openWikiLinkDirect',
                                 target: target,
-                                newTab: openInNewTab
+                                newTab: false
                             });
                         });
                         
@@ -236,8 +236,8 @@
                             
                             // Menu options
                             const options = [
-                                { text: 'Open', action: () => vscodeApi.postMessage({ command: 'openWikiLink', target: target, newTab: false }) },
-                                { text: 'Open in New Tab', action: () => vscodeApi.postMessage({ command: 'openWikiLink', target: target, newTab: true }) }
+                                { text: 'Open', action: () => vscodeApi.postMessage({ command: 'openWikiLinkDirect', target: target, newTab: false }) },
+                                { text: 'Open in New Tab', action: () => vscodeApi.postMessage({ command: 'openWikiLinkDirect', target: target, newTab: true }) }
                             ];
                             
                             options.forEach(option => {
