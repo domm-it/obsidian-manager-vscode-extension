@@ -79,7 +79,7 @@ function generateObsidianLink(targetFilePath: string, currentFilePath: string, v
 
 class ObsidianDragAndDropController implements vscode.TreeDragAndDropController<any> {
   readonly dragMimeTypes = ['application/vnd.code.tree.obsidianFiles'];
-  readonly dropMimeTypes = ['application/vnd.code.tree.obsidianFiles'];
+  readonly dropMimeTypes = ['application/vnd.code.tree.obsidianFiles', 'text/uri-list'];
   constructor(private refreshFn: () => Promise<void>) {}
   // Called when dragging items
   handleDrag(source: any[], data: vscode.DataTransfer, token: vscode.CancellationToken): void | Thenable<void> {
@@ -87,6 +87,14 @@ class ObsidianDragAndDropController implements vscode.TreeDragAndDropController<
   }
   // Called when dropping onto a target (folder or file)
   async handleDrop(target: any | undefined, data: vscode.DataTransfer, token: vscode.CancellationToken): Promise<void> {
+    // Check for external files first (from system file manager)
+    const uriList = data.get('text/uri-list');
+    if (uriList) {
+      await this.handleExternalFileDrop(target, uriList, token);
+      return;
+    }
+
+    // Handle internal drag and drop (within the tree view)
     const sources = _lastDragged || [];
     _lastDragged = [];
     if (!sources || sources.length === 0) return;
@@ -158,6 +166,167 @@ class ObsidianDragAndDropController implements vscode.TreeDragAndDropController<
     }
     // refresh provider via provided callback
     try { await this.refreshFn(); } catch (e) {}
+  }
+
+  // Handle external file drops from system file manager
+  private async handleExternalFileDrop(target: any | undefined, uriList: vscode.DataTransferItem, token: vscode.CancellationToken): Promise<void> {
+    const uriListText = await uriList.asString();
+    if (!uriListText) return;
+
+    // Parse URIs from the uri-list format
+    const uris = uriListText.split('\n')
+      .map(line => line.trim())
+      .filter(line => line && !line.startsWith('#'))
+      .map(uri => {
+        try {
+          // Handle both file:// URLs and local paths
+          if (uri.startsWith('file://')) {
+            return vscode.Uri.parse(uri);
+          } else {
+            return vscode.Uri.file(uri);
+          }
+        } catch (e) {
+          return null;
+        }
+      })
+      .filter(uri => uri !== null) as vscode.Uri[];
+
+    if (uris.length === 0) return;
+
+    // Determine destination folder
+    let destFolder: string | undefined;
+    if (target && target.isDirectory) {
+      destFolder = target.resourceUri.fsPath;
+    } else if (target && target.resourceUri) {
+      destFolder = path.dirname(target.resourceUri.fsPath);
+    } else if (!target) {
+      // Dropped onto root/empty space - move to vault root
+      const cfg = vscode.workspace.getConfiguration('obsidianManager');
+      const configuredVault = ((cfg.get<string>('vault') || '')).trim();
+      if (!configuredVault) {
+        vscode.window.showErrorMessage('Please configure the obsidianManager.vault setting first.');
+        return;
+      }
+      destFolder = configuredVault;
+    }
+
+    if (!destFolder) return;
+
+    // Process each external file
+    for (const sourceUri of uris) {
+      if (token.isCancellationRequested) break;
+
+      try {
+        const sourcePath = sourceUri.fsPath;
+        const fileName = path.basename(sourcePath);
+        let destPath = path.join(destFolder, fileName);
+
+        // Check if source file exists and get file stats
+        let sourceStats;
+        try {
+          sourceStats = await fs.lstat(sourcePath);
+        } catch (e) {
+          vscode.window.showWarningMessage(`Source file not found: ${fileName}`);
+          continue;
+        }
+
+        // Skip special files that can't be copied (sockets, pipes, etc.)
+        if (!sourceStats.isFile() && !sourceStats.isDirectory()) {
+          vscode.window.showWarningMessage(`Cannot copy "${fileName}": unsupported file type (socket, pipe, or device file)`);
+          continue;
+        }
+
+        // Handle filename conflicts
+        let destExists = false;
+        try { 
+          await fs.access(destPath); 
+          destExists = true; 
+        } catch (e) { 
+          destExists = false; 
+        }
+
+        if (destExists) {
+          const choice = await vscode.window.showQuickPick(['Overwrite', 'Rename', 'Cancel'], { 
+            placeHolder: `File "${fileName}" already exists. What would you like to do?` 
+          });
+          
+          if (!choice || choice === 'Cancel') continue;
+          
+          if (choice === 'Rename') {
+            // Find a new name
+            const ext = path.extname(fileName);
+            const nameOnly = path.basename(fileName, ext);
+            let idx = 1;
+            
+            while (true) {
+              const candidate = `${nameOnly}-${idx}${ext}`;
+              const candidatePath = path.join(destFolder, candidate);
+              try { 
+                await fs.access(candidatePath); 
+                idx++; 
+                continue; 
+              } catch (e) { 
+                destPath = candidatePath; 
+                break; 
+              }
+            }
+          }
+          // For 'Overwrite', we proceed with the original destPath
+        }
+
+        // Copy the file or directory to the destination
+        if (sourceStats.isDirectory()) {
+          await this.copyDirectory(sourcePath, destPath);
+        } else {
+          await fs.copyFile(sourcePath, destPath);
+        }
+
+        // Delete the original file/directory after successful copy (move operation)
+        try {
+          if (sourceStats.isDirectory()) {
+            await fs.rm(sourcePath, { recursive: true, force: true });
+          } else {
+            await fs.unlink(sourcePath);
+          }
+        } catch (deleteErr) {
+          // If deletion fails, warn user but don't fail the whole operation
+          vscode.window.showWarningMessage(`File copied successfully but failed to delete original "${fileName}": ${String(deleteErr)}`);
+        }
+        
+      } catch (err) {
+        const fileName = path.basename(sourceUri.fsPath);
+        vscode.window.showErrorMessage(`Failed to copy "${fileName}": ${String(err)}`);
+      }
+    }
+
+    // Refresh the tree view
+    try { 
+      await this.refreshFn(); 
+    } catch (e) {}
+  }
+
+  // Recursively copy a directory and its contents
+  private async copyDirectory(sourcePath: string, destPath: string): Promise<void> {
+    // Create destination directory
+    await fs.mkdir(destPath, { recursive: true });
+
+    // Read source directory contents
+    const entries = await fs.readdir(sourcePath, { withFileTypes: true });
+
+    // Copy each entry
+    for (const entry of entries) {
+      const sourceEntryPath = path.join(sourcePath, entry.name);
+      const destEntryPath = path.join(destPath, entry.name);
+
+      if (entry.isDirectory()) {
+        // Recursively copy subdirectory
+        await this.copyDirectory(sourceEntryPath, destEntryPath);
+      } else if (entry.isFile()) {
+        // Copy file
+        await fs.copyFile(sourceEntryPath, destEntryPath);
+      }
+      // Skip special files (sockets, pipes, etc.)
+    }
   }
 }
 
