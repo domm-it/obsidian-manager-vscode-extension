@@ -537,7 +537,38 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   });
 
-  context.subscriptions.push(disposableA, disposableB, openFileWithModeCmd);
+  // Command to open file in edit mode in beside column
+  const openFileBesideCmd = vscode.commands.registerCommand('obsidianManager.openFileBeside', async (...args: any[]) => {
+    const first = args && args[0];
+    let uri: vscode.Uri | undefined;
+    
+    if (first instanceof vscode.Uri) uri = first;
+    else if (first && typeof first === 'object') {
+      if ((first as any).resourceUri instanceof vscode.Uri) uri = (first as any).resourceUri;
+      else if ((first as any).uri instanceof vscode.Uri) uri = (first as any).uri;
+    }
+
+    if (!uri && vscode.window.activeTextEditor) {
+      uri = vscode.window.activeTextEditor.document.uri;
+    }
+
+    if (!uri) {
+      vscode.window.showErrorMessage('No file available to open beside.');
+      return;
+    }
+
+    try {
+      const document = await vscode.workspace.openTextDocument(uri);
+      await vscode.window.showTextDocument(document, { 
+        preview: false,
+        viewColumn: vscode.ViewColumn.Beside
+      });
+    } catch (error) {
+      vscode.window.showErrorMessage(`Unable to open file: ${String(error)}`);
+    }
+  });
+
+  context.subscriptions.push(disposableA, disposableB, openFileWithModeCmd, openFileBesideCmd);
 
   // Register command used by the view to open a file in Obsidian
   const openFromView = vscode.commands.registerCommand('obsidianManager.openFileFromView', async (...args: any[]) => {
@@ -2443,8 +2474,13 @@ export async function activate(context: vscode.ExtensionContext) {
     return vscode.commands.executeCommand('obsidianManager.openInPreviewMode', ...args);
   });
   
+  const openFileBesideContextCmd = vscode.commands.registerCommand('obsidianManager.openFileBeside.context', async (...args: any[]) => {
+    return vscode.commands.executeCommand('obsidianManager.openFileBeside', ...args);
+  });
+  
   context.subscriptions.push(openInEditModeContextCmd);
   context.subscriptions.push(openInPreviewModeContextCmd);
+  context.subscriptions.push(openFileBesideContextCmd);
 
   // Wiki-link command (no dialogs, only opens existing files)
   const openWikiLinkDirectCmd = vscode.commands.registerCommand('obsidianManager.openWikiLinkDirect', async (target: string, openInNewTab: boolean = false) => {

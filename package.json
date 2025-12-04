@@ -70,6 +70,12 @@
 				}
 			},
 			{
+				"command": "obsidianManager.openFileBeside",
+				"title": "2 - Open in New Tab (Edit Mode)",
+				"category": "Obsidian manager",
+				"icon": "$(split-horizontal)"
+			},
+			{
 				"command": "obsidianManager.pasteAsLink",
 				"title": "Obsidian > Paste as link",
 				"category": "Obsidian manager",
@@ -113,7 +119,7 @@
 			},
 			{
 				"command": "obsidianManager.deleteItem",
-				"title": "5 - Delete",
+				"title": "4 - Delete",
 				"category": "Obsidian manager",
 				"icon": "$(trash)"
 			},
@@ -245,7 +251,7 @@
 			},
 			{
 				"command": "obsidianManager.openInPreviewMode",
-				"title": "2 - Open in Preview Mode",
+				"title": "3 - Open in Preview Mode",
 				"category": "Obsidian manager",
 				"icon": "$(preview)"
 			},
@@ -260,6 +266,12 @@
 				"title": "Open in Preview Mode",
 				"category": "Obsidian manager",
 				"icon": "$(preview)"
+			},
+			{
+				"command": "obsidianManager.openFileBeside.context",
+				"title": "Open Beside in Edit Mode",
+				"category": "Obsidian manager",
+				"icon": "$(split-horizontal)"
 			},
 			{
 				"command": "obsidianManager.openWikiLink",
@@ -307,6 +319,11 @@
 					"group": "inline"
 				},
 				{
+					"command": "obsidianManager.openFileBeside",
+					"when": "view == obsidianFiles && viewItem == obsidianFile && config.obsidianManager.showFileIcons",
+					"group": "inline"
+				},
+				{
 					"command": "obsidianManager.deleteItem",
 					"when": "view == obsidianFiles && viewItem == obsidianFile && config.obsidianManager.showFileIcons",
 					"group": "inline"
@@ -323,6 +340,11 @@
 				},
 				{
 					"command": "obsidianManager.openInPreviewMode.context",
+					"when": "view == obsidianFiles && viewItem == obsidianFile",
+					"group": "0_edit"
+				},
+				{
+					"command": "obsidianManager.openFileBeside.context",
 					"when": "view == obsidianFiles && viewItem == obsidianFile",
 					"group": "0_edit"
 				},
