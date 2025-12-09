@@ -27,16 +27,44 @@ async function showMarkdownPreviewSafe(uri: vscode.Uri): Promise<void> {
     }
     
     // Short delay to ensure document is fully processed
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise(resolve => setTimeout(resolve, 100));
     
-    // Show markdown preview directly
-    await vscode.commands.executeCommand('markdown.showPreview', uri);
+    try {
+      // Try to show markdown preview
+      await vscode.commands.executeCommand('markdown.showPreview', uri);
+      
+      // Additional delay to let the preview render
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+    } catch (previewError) {
+      console.warn('Direct preview failed, trying alternative approach:', previewError);
+      
+      // Alternative approach: open in editor first, then show preview
+      await vscode.window.showTextDocument(document, { 
+        preview: true,
+        preserveFocus: true
+      });
+      
+      // Wait a bit more and try preview again
+      setTimeout(async () => {
+        try {
+          await vscode.commands.executeCommand('markdown.showPreview', uri);
+        } catch (e) {
+          // If this also fails, the document will remain in editor mode
+          console.warn('Alternative preview approach also failed:', e);
+        }
+      }, 500);
+    }
     
   } catch (error) {
-    // Fallback to regular file opening if preview fails
-    console.error('Failed to show markdown preview:', error);
-    const document = await vscode.workspace.openTextDocument(uri);
-    await vscode.window.showTextDocument(document, { preview: true });
+    // Final fallback to regular file opening if everything fails
+    console.error('All preview approaches failed:', error);
+    try {
+      const document = await vscode.workspace.openTextDocument(uri);
+      await vscode.window.showTextDocument(document, { preview: true });
+    } catch (fallbackError) {
+      vscode.window.showErrorMessage(`Unable to open file: ${String(fallbackError)}`);
+    }
   }
 }
 

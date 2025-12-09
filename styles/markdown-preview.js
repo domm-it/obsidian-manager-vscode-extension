@@ -2,36 +2,67 @@
 (function() {
     'use strict';
     
+    // Safety check - exit early if we're in an unsafe context
+    if (!window || !document || !document.body) {
+        return;
+    }
+    
     // Catch any uncaught errors to prevent breaking the preview
-    window.addEventListener('error', function(e) {
-        console.warn('JavaScript error in markdown preview:', e.error);
-        return true; // Prevent default error handling
-    });
+    try {
+        window.addEventListener('error', function(e) {
+            console.warn('JavaScript error in markdown preview:', e.error);
+            return true; // Prevent default error handling
+        });
+    } catch (e) {
+        // If we can't add error listener, continue without it
+    }
 
 
 
     function copyToClipboard(text) {
-        if (navigator.clipboard && window.isSecureContext) {
-            // Use modern clipboard API
-            return navigator.clipboard.writeText(text);
-        } else {
-            // Fallback for older browsers
-            return new Promise((resolve, reject) => {
-                const textArea = document.createElement('textarea');
-                textArea.value = text;
-                textArea.style.position = 'absolute';
-                textArea.style.left = '-9999px';
-                document.body.appendChild(textArea);
-                textArea.select();
-                try {
-                    document.execCommand('copy');
-                    document.body.removeChild(textArea);
-                    resolve();
-                } catch (err) {
-                    document.body.removeChild(textArea);
-                    reject(err);
+        return new Promise((resolve, reject) => {
+            try {
+                // Check if we have access to clipboard API
+                if (navigator && navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(text).then(resolve).catch(() => {
+                        // Fallback if clipboard API fails
+                        fallbackCopy(text, resolve, reject);
+                    });
+                } else {
+                    fallbackCopy(text, resolve, reject);
                 }
-            });
+            } catch (e) {
+                fallbackCopy(text, resolve, reject);
+            }
+        });
+    }
+    
+    function fallbackCopy(text, resolve, reject) {
+        try {
+            if (!document || !document.body) {
+                reject(new Error('Document not available'));
+                return;
+            }
+            
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            textArea.style.cssText = 'position:absolute;left:-9999px;top:-9999px;opacity:0;';
+            textArea.setAttribute('readonly', '');
+            
+            document.body.appendChild(textArea);
+            textArea.select();
+            textArea.setSelectionRange(0, text.length);
+            
+            const successful = document.execCommand('copy');
+            document.body.removeChild(textArea);
+            
+            if (successful) {
+                resolve();
+            } else {
+                reject(new Error('Copy command failed'));
+            }
+        } catch (err) {
+            reject(err);
         }
     }
 
@@ -145,14 +176,22 @@
 
     // Start observing with more specific options to reduce noise
     try {
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true,
-            attributes: false,
-            characterData: false
-        });
+        if (document && document.body && typeof MutationObserver !== 'undefined') {
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true,
+                attributes: false,
+                characterData: false
+            });
+        }
     } catch (e) {
         console.warn('Could not start MutationObserver:', e);
+        // If MutationObserver fails, try a simpler approach
+        try {
+            setTimeout(addCopyButtonsToCodeBlocks, 1000);
+        } catch (fallbackError) {
+            // If everything fails, just continue without dynamic updates
+        }
     }
 
 })();
