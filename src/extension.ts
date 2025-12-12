@@ -846,7 +846,7 @@ export async function activate(context: vscode.ExtensionContext) {
       currentCalendarView = webviewView;
       webviewView.webview.options = { enableScripts: true };
       
-      const updateCalendar = async (year: number, month: number, selectedFolder?: string) => {
+      const updateCalendar = async (year: number, month: number) => {
         const cfg = vscode.workspace.getConfiguration('obsidianManager');
         const weekStartDay = cfg.get<string>('weekStartDay', 'monday');
         const startOnMonday = weekStartDay === 'monday';
@@ -874,39 +874,12 @@ export async function activate(context: vscode.ExtensionContext) {
           ? ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
           : ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
         
-        // Get all folders from vault
-        let folderOptions = '';
-        if (vaultPath) {
-          try {
-            const getTopLevelFolders = async (dirPath: string): Promise<string[]> => {
-              const folders: string[] = [];
-              try {
-                const entries = await fs.readdir(dirPath, { withFileTypes: true });
-                for (const entry of entries) {
-                  if (entry.isDirectory() && !entry.name.startsWith('.')) {
-                    folders.push(entry.name);
-                  }
-                }
-              } catch (e) {
-                // Ignore unreadable directories
-              }
-              return folders;
-            };
-            
-            const folders = await getTopLevelFolders(vaultPath);
-            folders.sort();
-            folderOptions = ['Root', ...folders].map(folder => 
-              `<option value="${folder}" ${folder === (selectedFolder || 'Root') ? 'selected' : ''}>${folder}</option>`
-            ).join('');
-          } catch (e) {
-            folderOptions = '<option value="Root">Root</option>';
-          }
-        }
+
         
-        // Get files in selected folder to check which days have files (including subfolders)
+        // Get files from entire vault to check which days have files (always show all events)
         const filesInFolder = new Set<string>();
         const filePathsMap = new Map<string, string[]>(); // Map date to array of full file paths
-        if (vaultPath && selectedFolder) {
+        if (vaultPath) {
           const scanFolderRecursively = async (dirPath: string): Promise<void> => {
             try {
               const entries = await fs.readdir(dirPath, { withFileTypes: true });
@@ -931,26 +904,11 @@ export async function activate(context: vscode.ExtensionContext) {
             }
           };
           
-          try {
-            const folderPath = selectedFolder === 'Root' ? vaultPath : path.join(vaultPath, selectedFolder);
-            await scanFolderRecursively(folderPath);
-          } catch (e) {
-            // Ignore errors
-          }
+          // Always scan entire vault (root folder)
+          await scanFolderRecursively(vaultPath);
         }
         
         let calendarHtml = `
-          <div class="top-controls">
-            <button class="action-button" onclick="goToRoot()" title="Go to root folder">
-              🏠
-            </button>
-            <select class="folder-selector" onchange="folderChanged(this.value)">
-              ${folderOptions}
-            </select>
-            <button class="action-button" onclick="createTodayRecap()" title="Create today recap">
-              📋
-            </button>
-          </div>
           <div class="calendar-header">
             <button onclick="previousMonth()">&lt;</button>
             <span class="month-year">${monthNames[month]} ${year}</span>
@@ -1012,37 +970,8 @@ export async function activate(context: vscode.ExtensionContext) {
             margin: 0;
             font-size: 11px;
         }
-        .top-controls {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 8px;
-            align-items: center;
-        }
-        .action-button {
-            background: var(--vscode-button-background);
-            color: var(--vscode-button-foreground);
-            border: none;
-            padding: 6px 8px;
-            border-radius: 2px;
-            cursor: pointer;
-            font-size: 8px;
-            white-space: nowrap;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .action-button:hover {
-            background: var(--vscode-button-hoverBackground);
-        }
-        .folder-selector {
-            flex: 1;
-            padding: 4px 8px;
-            background: var(--vscode-input-background);
-            color: var(--vscode-input-foreground);
-            border: 1px solid var(--vscode-input-border);
-            border-radius: 2px;
-            font-size: 11px;
-        }
+
+
         .calendar-header {
             display: flex;
             justify-content: space-between;
@@ -1145,7 +1074,6 @@ export async function activate(context: vscode.ExtensionContext) {
         const vscode = acquireVsCodeApi();
         let currentYear = ${year};
         let currentMonth = ${month};
-        let selectedFolder = '${selectedFolder || 'Root'}';
         let filePathsMap = ${JSON.stringify(Object.fromEntries(filePathsMap))};
         
         function previousMonth() {
@@ -1158,8 +1086,7 @@ export async function activate(context: vscode.ExtensionContext) {
             vscode.postMessage({ 
                 command: 'updateCalendar', 
                 year: currentYear, 
-                month: currentMonth, 
-                folder: selectedFolder 
+                month: currentMonth 
             });
         }
         
@@ -1173,20 +1100,11 @@ export async function activate(context: vscode.ExtensionContext) {
             vscode.postMessage({ 
                 command: 'updateCalendar', 
                 year: currentYear, 
-                month: currentMonth, 
-                folder: selectedFolder 
+                month: currentMonth 
             });
         }
         
-        function folderChanged(folder) {
-            selectedFolder = folder;
-            vscode.postMessage({ 
-                command: 'updateCalendar', 
-                year: currentYear, 
-                month: currentMonth, 
-                folder: selectedFolder 
-            });
-        }
+
         
         function updateFilePathsMap(newMap) {
             filePathsMap = newMap;
@@ -1198,41 +1116,20 @@ export async function activate(context: vscode.ExtensionContext) {
             if (message.command === 'updateFilePathsMap') {
                 updateFilePathsMap(message.filePathsMap);
             } else if (message.command === 'refreshCalendar') {
-                // Refresh calendar maintaining current selected folder
+                // Refresh calendar
                 vscode.postMessage({ 
                     command: 'updateCalendar', 
                     year: currentYear, 
-                    month: currentMonth, 
-                    folder: selectedFolder 
+                    month: currentMonth 
                 });
-            } else if (message.command === 'selectFolder') {
-                // Update dropdown selection
-                const folderSelect = document.querySelector('.folder-selector');
-                if (folderSelect && message.folder !== undefined) {
-                    folderSelect.value = message.folder;
-                    folderChanged(message.folder);
-                }
             }
         });
-        
-        function goToRoot() {
-            const folderSelect = document.querySelector('.folder-selector');
-            if (folderSelect) {
-                folderSelect.value = 'Root';
-                folderChanged('Root');
-            }
-        }
-        
-        function createTodayRecap() {
-            vscode.postMessage({ command: 'createTodayInRoot' });
-        }
         
         function dayClicked(dateStr) {
             const existingFilePaths = filePathsMap[dateStr];
             vscode.postMessage({ 
                 command: 'dayClicked', 
                 date: dateStr, 
-                folder: selectedFolder,
                 existingFilePaths: existingFilePaths 
             });
         }
@@ -1243,16 +1140,13 @@ export async function activate(context: vscode.ExtensionContext) {
 
       // Initialize with current month
       const now = new Date();
-      updateCalendar(now.getFullYear(), now.getMonth(), 'Root');
+      updateCalendar(now.getFullYear(), now.getMonth());
 
       webviewView.webview.onDidReceiveMessage(async message => {
         if (message.command === 'updateCalendar') {
-          await updateCalendar(message.year, message.month, message.folder);
-        } else if (message.command === 'createTodayInRoot') {
-          vscode.commands.executeCommand('obsidianManager.createTodayInRoot');
-        } else if (message.command === 'selectFolder') {
-          // This message is sent from extension to webview to update dropdown selection
-          return;
+          await updateCalendar(message.year, message.month);
+
+
         } else if (message.command === 'dayClicked') {
           const cfg = vscode.workspace.getConfiguration('obsidianManager');
           const vaultPath = cfg.get<string>('vault', '');
@@ -1262,7 +1156,6 @@ export async function activate(context: vscode.ExtensionContext) {
             return;
           }
           
-          const currentFolder = message.folder || 'Root';
           const existingFilePaths = message.existingFilePaths;
           
           // Create quick pick items - always start with "Create new file" option
@@ -1270,8 +1163,8 @@ export async function activate(context: vscode.ExtensionContext) {
           
           // Add "Create new file" as first option
           quickPickItems.push({
-            label: 'Create new file in selected folder',
-            description: `Create in ${currentFolder === 'Root' ? 'root folder' : currentFolder}`,
+            label: 'Create new file in root vault',
+            description: 'Create in root vault folder',
             detail: 'NEW_FILE'
           });
           
@@ -1307,12 +1200,12 @@ export async function activate(context: vscode.ExtensionContext) {
           
           if (selectedItem.detail === 'NEW_FILE') {
             // Create new file - prompt for filename
-            const folderPath = currentFolder === 'Root' ? vaultPath : path.join(vaultPath, currentFolder);
+            const folderPath = vaultPath; // Always use root vault
             const defaultFileName = message.date; // YYYY-MM-DD format
             
             // Show input box for filename (without .md extension)
             const fileName = await vscode.window.showInputBox({
-              prompt: `Create new file in ${currentFolder === 'Root' ? 'root folder' : `folder "${currentFolder}"`}`,
+              prompt: 'Create new file in root vault folder',
               value: defaultFileName,
               placeHolder: 'Enter filename (without .md extension)',
               validateInput: (value) => {
@@ -1343,7 +1236,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 
                 // Update calendar to reflect the new file
                 const dateObj = new Date(message.date);
-                updateCalendar(dateObj.getFullYear(), dateObj.getMonth(), currentFolder);
+                updateCalendar(dateObj.getFullYear(), dateObj.getMonth());
                 
               } catch (createError) {
                 vscode.window.showErrorMessage(`Failed to create file: ${String(createError)}`);
@@ -2094,54 +1987,7 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   context.subscriptions.push(duplicateCmd);
 
-  // Command to create today's note
-  const createTodayCmd = vscode.commands.registerCommand('obsidianManager.createTodayNote', async (...args: any[]) => {
-    // Determine folder Uri from args or active selection
-    let folderUri: vscode.Uri | undefined;
-    const first = args && args[0];
-    if (first instanceof vscode.Uri) folderUri = first;
-    else if (first && typeof first === 'object') {
-      if ((first as any).resourceUri instanceof vscode.Uri) folderUri = (first as any).resourceUri;
-      else if ((first as any).uri instanceof vscode.Uri) folderUri = (first as any).uri;
-    }
 
-    if (!folderUri && vscode.window.activeTextEditor) {
-      folderUri = vscode.window.activeTextEditor.document.uri;
-    }
-
-    if (!folderUri) {
-      vscode.window.showErrorMessage('No folder selected to create today\'s note.');
-      return;
-    }
-
-    const cfg = vscode.workspace.getConfiguration('obsidianManager');
-    const configuredVault = ((cfg.get<string>('vault') || '')).trim();
-    const folderFs = folderUri.fsPath;
-
-    // Generate today's date in YYYY-MM-DD format
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    const todayString = `${year}-${month}-${day}`;
-    
-    const fileName = `${todayString}.md`;
-    const targetPath = path.join(folderFs, fileName);
-    
-    // Update calendar dropdown to show the selected folder
-    if (currentCalendarView && configuredVault) {
-      const relativePath = path.relative(configuredVault, folderFs);
-      const folderToSelect = relativePath === '' || relativePath === '.' ? 'Root' : path.basename(folderFs);
-      
-      currentCalendarView.webview.postMessage({
-        command: 'selectFolder',
-        folder: folderToSelect
-      });
-    }
-    
-    // No file operations - calendar will handle file opening
-  });
-  context.subscriptions.push(createTodayCmd);
 
   // Command to create a new file in vault root
   const createFileInRootCmd = vscode.commands.registerCommand('obsidianManager.createFileInRoot', async () => {
@@ -2580,7 +2426,6 @@ export async function activate(context: vscode.ExtensionContext) {
   const contextAliases = [
     { alias: 'obsidianManager.openFileFromView.context', original: 'obsidianManager.openFileFromView' },
     { alias: 'obsidianManager.createFileInFolder.context', original: 'obsidianManager.createFileInFolder' },
-    { alias: 'obsidianManager.createTodayNote.context', original: 'obsidianManager.createTodayNote' },
     { alias: 'obsidianManager.createFolder.context', original: 'obsidianManager.createFolder' },
     { alias: 'obsidianManager.renameItem.context', original: 'obsidianManager.renameItem' },
     { alias: 'obsidianManager.deleteItem.context', original: 'obsidianManager.deleteItem' },

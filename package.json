@@ -99,12 +99,7 @@
 				"category": "Obsidian manager",
 				"icon": "$(new-file)"
 			},
-			{
-				"command": "obsidianManager.createTodayNote",
-				"title": "2 - Create today & set calendar",
-				"category": "Obsidian manager",
-				"icon": "$(calendar)"
-			},
+
 			{
 				"command": "obsidianManager.renameItem",
 				"title": "3 - Rename",
@@ -183,18 +178,7 @@
 				"category": "Obsidian manager",
 				"icon": "$(new-file)"
 			},
-			{
-				"command": "obsidianManager.createTodayNote",
-				"title": "2 - Set calendar to folder",
-				"category": "Obsidian manager",
-				"icon": "$(calendar)"
-			},
-			{
-				"command": "obsidianManager.createTodayNote.context",
-				"title": "Set calendar to folder",
-				"category": "Obsidian manager",
-				"icon": "$(calendar)"
-			},
+
 			{
 				"command": "obsidianManager.createTodayFileInFolder",
 				"title": "Create today file in folder",
@@ -363,11 +347,7 @@
 					"when": "view == obsidianFiles && viewItem == obsidianFolder",
 					"group": "1_create"
 				},
-				{
-					"command": "obsidianManager.createTodayNote.context",
-					"when": "view == obsidianFiles && viewItem == obsidianFolder",
-					"group": "2_calendar"
-				},
+
 				{
 					"command": "obsidianManager.revealInFinder",
 					"when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
