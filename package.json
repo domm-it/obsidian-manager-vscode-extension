@@ -300,37 +300,37 @@
 			"view/item/context": [
 				{
 					"command": "obsidianManager.createFileInFolder",
-					"when": "view == obsidianFiles && viewItem == obsidianFolder && config.obsidianManager.showFolderIcons",
+					"when": "view == obsidianFiles && viewItem == obsidianFolder",
 					"group": "inline"
 				},
 				{
 					"command": "obsidianManager.createFolder",
-					"when": "view == obsidianFiles && viewItem == obsidianFolder && config.obsidianManager.showFolderIcons",
+					"when": "view == obsidianFiles && viewItem == obsidianFolder",
 					"group": "inline"
 				},
 				{
 					"command": "obsidianManager.openInEditMode",
-					"when": "view == obsidianFiles && viewItem == obsidianFile && config.obsidianManager.showFileIcons",
+					"when": "view == obsidianFiles && viewItem == obsidianFile",
 					"group": "inline"
 				},
 				{
 					"command": "obsidianManager.openInPreviewMode",
-					"when": "view == obsidianFiles && viewItem == obsidianFile && config.obsidianManager.showFileIcons",
+					"when": "view == obsidianFiles && viewItem == obsidianFile",
 					"group": "inline"
 				},
 				{
 					"command": "obsidianManager.openFileBeside",
-					"when": "view == obsidianFiles && viewItem == obsidianFile && config.obsidianManager.showFileIcons",
+					"when": "view == obsidianFiles && viewItem == obsidianFile",
 					"group": "inline"
 				},
 				{
 					"command": "obsidianManager.deleteItem",
-					"when": "view == obsidianFiles && viewItem == obsidianFile && config.obsidianManager.showFileIcons",
+					"when": "view == obsidianFiles && viewItem == obsidianFile",
 					"group": "inline"
 				},
 				{
 					"command": "obsidianManager.deleteItem",
-					"when": "view == obsidianFiles && viewItem == obsidianFolder && config.obsidianManager.showFolderIcons",
+					"when": "view == obsidianFiles && viewItem == obsidianFolder",
 					"group": "inline"
 				},
 				{
@@ -469,15 +469,16 @@
 					"default": true,
 					"description": "If true the folders in the Obsidian view will be expanded by default when the view is shown."
 				},
-				"obsidianManager.showFileIcons": {
+
+				"obsidianManager.showFolderTreeIcons": {
 					"type": "boolean",
 					"default": true,
-					"description": "Show inline action icons next to files in the Obsidian sidebar view (Edit Mode, Preview Mode, Delete)."
+					"description": "Show folder icons in the tree view next to folder names."
 				},
-				"obsidianManager.showFolderIcons": {
+				"obsidianManager.showFileTreeIcons": {
 					"type": "boolean",
 					"default": true,
-					"description": "Show inline action icons next to folders in the Obsidian sidebar view (Create File, Create Folder, Delete)."
+					"description": "Show file icons in the tree view next to file names."
 				},
 				"obsidianManager.viewMode": {
 					"type": "string",

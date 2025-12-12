@@ -57,12 +57,13 @@ export class ObsidianTreeProvider implements vscode.TreeDataProvider<ObsidianNod
   );
     treeItem.resourceUri = element.resourceUri;
 
-    const showFileIcons = cfg.get<boolean>('showFileIcons', true);
-    const showFolderIcons = cfg.get<boolean>('showFolderIcons', true);
+    // Settings for tree view visual icons
+    const showFolderTreeIcons = cfg.get<boolean>('showFolderTreeIcons', true);
+    const showFileTreeIcons = cfg.get<boolean>('showFileTreeIcons', true);
     
     if (element.isDirectory) {
       treeItem.contextValue = 'obsidianFolder';
-      if (showFolderIcons) {
+      if (showFolderTreeIcons) {
         // Use VS Code's ThemeIcon for folders so the icon follows theme colors and
         // file-icon settings. `symbol-folder` is a suitable symbol for a folder container.
         treeItem.iconPath = new vscode.ThemeIcon('symbol-folder');
@@ -75,7 +76,7 @@ export class ObsidianTreeProvider implements vscode.TreeDataProvider<ObsidianNod
         arguments: [element.resourceUri]
       };
       treeItem.contextValue = 'obsidianFile';
-      if (showFileIcons) treeItem.iconPath = this.getIconForFile(element.resourceUri.fsPath);
+      if (showFileTreeIcons) treeItem.iconPath = this.getIconForFile(element.resourceUri.fsPath);
     }
 
     return treeItem;
