@@ -2,7 +2,7 @@
 	"name": "obsidian-manager",
 	"displayName": "Obsidian Manager",
 	"description": "Adds a button and a vault/file manager view to open and manage Markdown files with Obsidian.",
-	"version": "1.4.2",
+	"version": "1.5.0",
 	"publisher": "domm-it",
 	"icon": "images/logo.png",
 	"author": {
@@ -99,7 +99,6 @@
 				"category": "Obsidian manager",
 				"icon": "$(new-file)"
 			},
-
 			{
 				"command": "obsidianManager.renameItem",
 				"title": "3 - Rename",
@@ -178,7 +177,6 @@
 				"category": "Obsidian manager",
 				"icon": "$(new-file)"
 			},
-
 			{
 				"command": "obsidianManager.createTodayFileInFolder",
 				"title": "Create today file in folder",
@@ -347,7 +345,6 @@
 					"when": "view == obsidianFiles && viewItem == obsidianFolder",
 					"group": "1_create"
 				},
-
 				{
 					"command": "obsidianManager.revealInFinder",
 					"when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
