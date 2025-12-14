@@ -1,587 +1,587 @@
 {
-	"name": "obsidian-manager",
-	"displayName": "Obsidian Manager",
-	"description": "Adds a button and a vault/file manager view to open and manage Markdown files with Obsidian.",
-	"version": "1.5.0",
-	"publisher": "domm-it",
-	"icon": "images/logo.png",
-	"author": {
-		"name": "domm-it"
-	},
-	"license": "MIT",
-	"homepage": "https://github.com/domm-it/obsidian-manager-vscode-extension",
-	"repository": {
-		"type": "git",
-		"url": "https://github.com/domm-it/obsidian-manager-vscode-extension.git"
-	},
-	"bugs": {
-		"url": "https://github.com/domm-it/obsidian-manager-vscode-extension/issues"
-	},
-	"keywords": [
-		"obsidian",
-		"markdown",
-		"notes",
-		"vault",
-		"file manager",
-		"knowledge management"
-	],
-	"galleryBanner": {
-		"color": "#1e1e1e",
-		"theme": "dark"
-	},
-	"engines": {
-		"vscode": "^1.60.0"
-	},
-	"categories": [
-		"Other"
-	],
-	"activationEvents": [
-		"onLanguage:markdown"
-	],
-	"main": "./out/extension.js",
-	"scripts": {
-		"vscode:prepublish": "npm run compile",
-		"compile": "tsc -p .",
-		"package": "npm run compile && node ./node_modules/.bin/vsce package",
-		"watch": "tsc -w -p ."
-	},
-	"devDependencies": {
-		"@types/node": "^18.19.130",
-		"@types/vscode": "^1.60.0",
-		"typescript": "^4.9.0",
-		"vscode-test": "^1.6.0",
-		"@vscode/vsce": "^2.6.0"
-	},
-	"contributes": {
-		"commands": [
-			{
-				"command": "obsidianManager.refreshView",
-				"title": "Refresh",
-				"category": "Obsidian manager",
-				"icon": "$(refresh)"
-			},
-			{
-				"command": "obsidianManager.openFile.icon",
-				"title": "Open in Obsidian",
-				"category": "Obsidian manager",
-				"icon": {
-					"light": "images/obsidian.svg",
-					"dark": "images/obsidian.svg"
-				}
-			},
-			{
-				"command": "obsidianManager.openFileBeside",
-				"title": "2 - Open in New Tab (Edit Mode)",
-				"category": "Obsidian manager",
-				"icon": "$(split-horizontal)"
-			},
-			{
-				"command": "obsidianManager.pasteAsLink",
-				"title": "Obsidian > Paste as link",
-				"category": "Obsidian manager",
-				"icon": "$(link)"
-			},
-			{
-				"command": "obsidianManager.openFileFromView",
-				"title": "5 - Open in Obsidian",
-				"category": "Obsidian manager",
-				"icon": "$(link-external)"
-			},
-			{
-				"command": "obsidianManager.createFolder",
-				"title": "0 - New folder",
-				"category": "Obsidian manager",
-				"icon": "$(new-folder)"
-			},
-			{
-				"command": "obsidianManager.createFileInFolder",
-				"title": "1 - New note",
-				"category": "Obsidian manager",
-				"icon": "$(new-file)"
-			},
-			{
-				"command": "obsidianManager.renameItem",
-				"title": "3 - Rename",
-				"category": "Obsidian manager",
-				"icon": "$(edit)"
-			},
-			{
-				"command": "obsidianManager.duplicateItem",
-				"title": "4 - Duplicate",
-				"category": "Obsidian manager",
-				"icon": "$(copy)"
-			},
-			{
-				"command": "obsidianManager.deleteItem",
-				"title": "4 - Delete",
-				"category": "Obsidian manager",
-				"icon": "$(trash)"
-			},
-			{
-				"command": "obsidianManager.openSettings",
-				"title": "Open settings",
-				"category": "Obsidian manager",
-				"icon": "$(gear)"
-			},
-			{
-				"command": "obsidianManager.toggleViewMode",
-				"title": "Toggle view mode",
-				"category": "Obsidian manager",
-				"icon": "$(list-unordered)"
-			},
-			{
-				"command": "obsidianManager.toggleExpandAll",
-				"title": "Toggle expand/collapse all",
-				"category": "Obsidian manager",
-				"icon": "$(collapse-all)"
-			},
-			{
-				"command": "obsidianManager.linkDocument",
-				"title": "Obsidian > Link to Document",
-				"category": "Obsidian manager",
-				"icon": "$(link)"
-			},
-			{
-				"command": "obsidianManager.duplicateFromEditor",
-				"title": "Obsidian > Duplicate Current File",
-				"category": "Obsidian manager",
-				"icon": "$(copy)"
-			},
-			{
-				"command": "obsidianManager.includeClipboardCodeBlock",
-				"title": "Obsidian > Include clipboard in Code Block",
-				"category": "Obsidian manager",
-				"icon": "$(clippy)"
-			},
-			{
-				"command": "obsidianManager.putInsideCodeblock",
-				"title": "Obsidian > Put inside a codeblock",
-				"category": "Obsidian manager",
-				"icon": "$(code)"
-			},
-			{
-				"command": "obsidianManager.copySelectionToFile",
-				"title": "Obsidian > Copy selection to another file",
-				"category": "Obsidian manager",
-				"icon": "$(file-add)"
-			},
-			{
-				"command": "obsidianManager.openFileFromView.context",
-				"title": "Open in Obsidian",
-				"category": "Obsidian manager",
-				"icon": "$(link-external)"
-			},
-			{
-				"command": "obsidianManager.createFileInFolder.context",
-				"title": "New note",
-				"category": "Obsidian manager",
-				"icon": "$(new-file)"
-			},
-			{
-				"command": "obsidianManager.createTodayFileInFolder",
-				"title": "Create today file in folder",
-				"category": "Obsidian manager",
-				"icon": "$(new-file)"
-			},
-			{
-				"command": "obsidianManager.createFolder.context",
-				"title": "New folder",
-				"category": "Obsidian manager",
-				"icon": "$(new-folder)"
-			},
-			{
-				"command": "obsidianManager.renameItem.context",
-				"title": "Rename",
-				"category": "Obsidian manager",
-				"icon": "$(edit)"
-			},
-			{
-				"command": "obsidianManager.duplicateItem.context",
-				"title": "Duplicate",
-				"category": "Obsidian manager",
-				"icon": "$(copy)"
-			},
-			{
-				"command": "obsidianManager.deleteItem.context",
-				"title": "Delete",
-				"category": "Obsidian manager",
-				"icon": "$(trash)"
-			},
-			{
-				"command": "obsidianManager.createTodayInRoot",
-				"title": "Create today in root",
-				"category": "Obsidian manager",
-				"icon": "$(calendar)"
-			},
-			{
-				"command": "obsidianManager.createFileInRoot",
-				"title": "New note in root",
-				"category": "Obsidian manager",
-				"icon": "$(new-file)"
-			},
-			{
-				"command": "obsidianManager.revealInFinder",
-				"title": "Reveal in Finder",
-				"category": "Obsidian manager",
-				"icon": "$(folder-opened)"
-			},
-			{
-				"command": "obsidianManager.openInEditMode",
-				"title": "1 - Open in Edit Mode",
-				"category": "Obsidian manager",
-				"icon": "$(edit)"
-			},
-			{
-				"command": "obsidianManager.openInPreviewMode",
-				"title": "3 - Open in Preview Mode",
-				"category": "Obsidian manager",
-				"icon": "$(preview)"
-			},
-			{
-				"command": "obsidianManager.openInEditMode.context",
-				"title": "Open in Edit Mode",
-				"category": "Obsidian manager",
-				"icon": "$(edit)"
-			},
-			{
-				"command": "obsidianManager.openInPreviewMode.context",
-				"title": "Open in Preview Mode",
-				"category": "Obsidian manager",
-				"icon": "$(preview)"
-			},
-			{
-				"command": "obsidianManager.openFileBeside.context",
-				"title": "Open Beside in Edit Mode",
-				"category": "Obsidian manager",
-				"icon": "$(split-horizontal)"
-			},
-			{
-				"command": "obsidianManager.openWikiLink",
-				"title": "Open Wiki Link",
-				"category": "Obsidian manager"
-			}
-		],
-		"menus": {
-			"editor/title": [
-				{
-					"command": "obsidianManager.openFile.icon",
-					"when": "resourceExtname == .md || editorLangId == markdown",
-					"group": "navigation"
-				},
-				{
-					"command": "obsidianManager.linkDocument",
-					"when": "resourceExtname == .md || editorLangId == markdown",
-					"group": "navigation"
-				},
-				{
-					"command": "obsidianManager.duplicateFromEditor",
-					"when": "resourceExtname == .md || editorLangId == markdown",
-					"group": "navigation"
-				}
-			],
-			"view/item/context": [
-				{
-					"command": "obsidianManager.createFileInFolder",
-					"when": "view == obsidianFiles && viewItem == obsidianFolder",
-					"group": "inline"
-				},
-				{
-					"command": "obsidianManager.createFolder",
-					"when": "view == obsidianFiles && viewItem == obsidianFolder",
-					"group": "inline"
-				},
-				{
-					"command": "obsidianManager.openInEditMode",
-					"when": "view == obsidianFiles && viewItem == obsidianFile",
-					"group": "inline"
-				},
-				{
-					"command": "obsidianManager.openInPreviewMode",
-					"when": "view == obsidianFiles && viewItem == obsidianFile",
-					"group": "inline"
-				},
-				{
-					"command": "obsidianManager.openFileBeside",
-					"when": "view == obsidianFiles && viewItem == obsidianFile",
-					"group": "inline"
-				},
-				{
-					"command": "obsidianManager.deleteItem",
-					"when": "view == obsidianFiles && viewItem == obsidianFile",
-					"group": "inline"
-				},
-				{
-					"command": "obsidianManager.deleteItem",
-					"when": "view == obsidianFiles && viewItem == obsidianFolder",
-					"group": "inline"
-				},
-				{
-					"command": "obsidianManager.openInEditMode.context",
-					"when": "view == obsidianFiles && viewItem == obsidianFile",
-					"group": "0_edit"
-				},
-				{
-					"command": "obsidianManager.openInPreviewMode.context",
-					"when": "view == obsidianFiles && viewItem == obsidianFile",
-					"group": "0_edit"
-				},
-				{
-					"command": "obsidianManager.openFileBeside.context",
-					"when": "view == obsidianFiles && viewItem == obsidianFile",
-					"group": "0_edit"
-				},
-				{
-					"command": "obsidianManager.openFileFromView.context",
-					"when": "view == obsidianFiles && viewItem == obsidianFile",
-					"group": "1_open"
-				},
-				{
-					"command": "obsidianManager.createFileInFolder.context",
-					"when": "view == obsidianFiles && viewItem == obsidianFolder",
-					"group": "1_create"
-				},
-				{
-					"command": "obsidianManager.createFolder.context",
-					"when": "view == obsidianFiles && viewItem == obsidianFolder",
-					"group": "1_create"
-				},
-				{
-					"command": "obsidianManager.revealInFinder",
-					"when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
-					"group": "2_calendar"
-				},
-				{
-					"command": "obsidianManager.renameItem.context",
-					"when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
-					"group": "3_modify@1"
-				},
-				{
-					"command": "obsidianManager.duplicateItem.context",
-					"when": "view == obsidianFiles && viewItem == obsidianFile",
-					"group": "3_modify@2"
-				},
-				{
-					"command": "obsidianManager.deleteItem.context",
-					"when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
-					"group": "3_modify@3"
-				}
-			],
-			"editor/context": [
-				{
-					"command": "obsidianManager.linkDocument",
-					"when": "resourceExtname == .md || editorLangId == markdown",
-					"group": "obsidian"
-				},
-				{
-					"command": "obsidianManager.duplicateFromEditor",
-					"when": "resourceExtname == .md || editorLangId == markdown",
-					"group": "obsidian"
-				},
-				{
-					"command": "obsidianManager.includeClipboardCodeBlock",
-					"when": "resourceExtname == .md || editorLangId == markdown",
-					"group": "obsidian"
-				},
-				{
-					"command": "obsidianManager.putInsideCodeblock",
-					"when": "resourceExtname == .md || editorLangId == markdown",
-					"group": "obsidian"
-				},
-				{
-					"command": "obsidianManager.copySelectionToFile",
-					"when": "resourceExtname == .md || editorLangId == markdown && editorHasSelection",
-					"group": "obsidian"
-				}
-			],
-			"view/title": [
-				{
-					"command": "obsidianManager.createFolder",
-					"when": "view == obsidianFiles",
-					"group": "navigation@1"
-				},
-				{
-					"command": "obsidianManager.createFileInRoot",
-					"when": "view == obsidianFiles",
-					"group": "navigation@1"
-				},
-				{
-					"command": "obsidianManager.refreshView",
-					"when": "view == obsidianFiles",
-					"group": "navigation@2"
-				},
-				{
-					"command": "obsidianManager.toggleViewMode",
-					"when": "view == obsidianFiles && !obsidianManager.viewModeIsList",
-					"group": "navigation@2"
-				},
-				{
-					"command": "obsidianManager.toggleExpandAll",
-					"title": "Toggle expand/collapse all",
-					"when": "view == obsidianFiles",
-					"group": "navigation@2",
-					"icon": "$(collapse-all)"
-				},
-				{
-					"command": "obsidianManager.toggleViewMode",
-					"when": "view == obsidianFiles && obsidianManager.viewModeIsList",
-					"group": "navigation@2"
-				},
-				{
-					"command": "obsidianManager.openSettings",
-					"when": "view == obsidianFiles",
-					"group": "navigation@3"
-				}
-			]
-		},
-		"configuration": {
-			"title": "Obsidian manager",
-			"properties": {
-				"obsidianManager.vault": {
-					"type": "string",
-					"default": "",
-					"description": "Absolute path to your Obsidian vault folder. The sidebar view will read Markdown files from this folder and the extension will use this path when building obsidian:// links."
-				},
-				"obsidianManager.expandFoldersOnLoad": {
-					"type": "boolean",
-					"default": true,
-					"description": "If true the folders in the Obsidian view will be expanded by default when the view is shown."
-				},
-				"obsidianManager.showFolderTreeIcons": {
-					"type": "boolean",
-					"default": true,
-					"description": "Show folder icons in the tree view next to folder names."
-				},
-				"obsidianManager.showFileTreeIcons": {
-					"type": "boolean",
-					"default": true,
-					"description": "Show file icons in the tree view next to file names."
-				},
-				"obsidianManager.viewMode": {
-					"type": "string",
-					"enum": [
-						"folders",
-						"list"
-					],
-					"default": "folders",
-					"description": "How to present files in the sidebar: 'folders' shows hierarchical folders, 'list' shows a flat list of Markdown files."
-				},
-				"obsidianManager.weekStartDay": {
-					"type": "string",
-					"enum": [
-						"sunday",
-						"monday"
-					],
-					"default": "monday",
-					"description": "First day of the week in calendar: 'sunday' or 'monday'."
-				},
-				"obsidianManager.openFileMode": {
-					"type": "string",
-					"enum": [
-						"edit",
-						"preview"
-					],
-					"default": "preview",
-					"description": "How files should be opened: 'edit' mode for immediate editing or 'preview' mode for read-only viewing."
-				},
-				"obsidianManager.newFileOpenMode": {
-					"type": "string",
-					"enum": [
-						"edit",
-						"preview"
-					],
-					"default": "edit",
-					"description": "How newly created files should be opened: 'edit' for immediate editing or 'preview' for read-only viewing."
-				},
-				"obsidianManager.addTitleToNewFiles": {
-					"type": "boolean",
-					"default": true,
-					"description": "Automatically add an H1 title (based on filename) as the first line when creating new files."
-				},
-				"obsidianManager.linkPreviewMode": {
-					"type": "string",
-					"enum": [
-						"full",
-						"lastSegment"
-					],
-					"default": "full",
-					"description": "When pasting a URL as a link: 'full' shows the full URL as link text; 'lastSegment' shows only the last path segment/file name. Query strings and hashes are removed from the preview."
-				}
-			}
-		},
-		"keybindings": [
-			{
-				"command": "obsidianManager.linkDocument",
-				"key": "ctrl+shift+l",
-				"mac": "ctrl+shift+l",
-				"when": "editorTextFocus && resourceExtname == .md"
-			},
-			{
-				"command": "obsidianManager.includeClipboardCodeBlock",
-				"key": "ctrl+shift+v",
-				"mac": "ctrl+shift+v",
-				"when": "editorTextFocus && resourceExtname == .md"
-			},
-			{
-				"command": "obsidianManager.putInsideCodeblock",
-				"key": "ctrl+x",
-				"mac": "ctrl+x",
-				"when": "editorTextFocus && resourceExtname == .md"
-			},
-			{
-				"command": "obsidianManager.pasteAsLink",
-				"key": "ctrl+v",
-				"mac": "ctrl+v",
-				"when": "editorTextFocus && resourceExtname == .md"
-			},
-			{
-				"command": "editor.action.insertSnippet",
-				"args": {
-					"snippet": "**${TM_SELECTED_TEXT:$1}**$0"
-				},
-				"key": "ctrl+b",
-				"mac": "cmd+b",
-				"when": "editorTextFocus && resourceExtname == .md"
-			},
-			{
-				"command": "editor.action.insertSnippet",
-				"args": {
-					"snippet": "*${TM_SELECTED_TEXT:$1}*$0"
-				},
-				"key": "ctrl+i",
-				"mac": "cmd+i",
-				"when": "editorTextFocus && resourceExtname == .md"
-			}
-		],
-		"viewsContainers": {
-			"activitybar": [
-				{
-					"id": "obsidianManager",
-					"title": "Obsidian",
-					"icon": "images/obsidian-icon.svg"
-				}
-			]
-		},
-		"views": {
-			"obsidianManager": [
-				{
-					"id": "obsidianCalendar",
-					"name": "Calendar",
-					"type": "webview",
-					"visibility": "visible"
-				},
-				{
-					"id": "obsidianFiles",
-					"name": "Vault files",
-					"visibility": "visible"
-				}
-			]
-		},
-		"markdown.markdownItPlugins": true,
-		"markdown.previewStyles": [
-			"./styles/markdown-preview.css"
-		],
-		"markdown.previewScripts": [
-			"./styles/markdown-preview.js"
-		]
-	}
+  "name": "obsidian-manager",
+  "displayName": "Obsidian Manager",
+  "description": "Adds a button and a vault/file manager view to open and manage Markdown files with Obsidian.",
+  "version": "1.5.1",
+  "publisher": "domm-it",
+  "icon": "images/logo.png",
+  "author": {
+    "name": "domm-it"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/domm-it/obsidian-manager-vscode-extension",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/domm-it/obsidian-manager-vscode-extension.git"
+  },
+  "bugs": {
+    "url": "https://github.com/domm-it/obsidian-manager-vscode-extension/issues"
+  },
+  "keywords": [
+    "obsidian",
+    "markdown",
+    "notes",
+    "vault",
+    "file manager",
+    "knowledge management"
+  ],
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:markdown"
+  ],
+  "main": "./out/extension.js",
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p .",
+    "package": "npm run compile && node ./node_modules/.bin/vsce package",
+    "watch": "tsc -w -p ."
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.130",
+    "@types/vscode": "^1.60.0",
+    "typescript": "^4.9.0",
+    "vscode-test": "^1.6.0",
+    "@vscode/vsce": "^2.6.0"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "obsidianManager.refreshView",
+        "title": "Refresh",
+        "category": "Obsidian manager",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "obsidianManager.openFile.icon",
+        "title": "Open in Obsidian",
+        "category": "Obsidian manager",
+        "icon": {
+          "light": "images/obsidian.svg",
+          "dark": "images/obsidian.svg"
+        }
+      },
+      {
+        "command": "obsidianManager.openFileBeside",
+        "title": "2 - Open in New Tab (Edit Mode)",
+        "category": "Obsidian manager",
+        "icon": "$(split-horizontal)"
+      },
+      {
+        "command": "obsidianManager.pasteAsLink",
+        "title": "Obsidian > Paste as link",
+        "category": "Obsidian manager",
+        "icon": "$(link)"
+      },
+      {
+        "command": "obsidianManager.openFileFromView",
+        "title": "5 - Open in Obsidian",
+        "category": "Obsidian manager",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "obsidianManager.createFolder",
+        "title": "0 - New folder",
+        "category": "Obsidian manager",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "obsidianManager.createFileInFolder",
+        "title": "1 - New note",
+        "category": "Obsidian manager",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "obsidianManager.renameItem",
+        "title": "3 - Rename",
+        "category": "Obsidian manager",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "obsidianManager.duplicateItem",
+        "title": "4 - Duplicate",
+        "category": "Obsidian manager",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "obsidianManager.deleteItem",
+        "title": "4 - Delete",
+        "category": "Obsidian manager",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "obsidianManager.openSettings",
+        "title": "Open settings",
+        "category": "Obsidian manager",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "obsidianManager.toggleViewMode",
+        "title": "Toggle view mode",
+        "category": "Obsidian manager",
+        "icon": "$(list-unordered)"
+      },
+      {
+        "command": "obsidianManager.toggleExpandAll",
+        "title": "Toggle expand/collapse all",
+        "category": "Obsidian manager",
+        "icon": "$(collapse-all)"
+      },
+      {
+        "command": "obsidianManager.linkDocument",
+        "title": "Obsidian > Link to Document",
+        "category": "Obsidian manager",
+        "icon": "$(link)"
+      },
+      {
+        "command": "obsidianManager.duplicateFromEditor",
+        "title": "Obsidian > Duplicate Current File",
+        "category": "Obsidian manager",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "obsidianManager.includeClipboardCodeBlock",
+        "title": "Obsidian > Include clipboard in Code Block",
+        "category": "Obsidian manager",
+        "icon": "$(clippy)"
+      },
+      {
+        "command": "obsidianManager.putInsideCodeblock",
+        "title": "Obsidian > Put inside a codeblock",
+        "category": "Obsidian manager",
+        "icon": "$(code)"
+      },
+      {
+        "command": "obsidianManager.copySelectionToFile",
+        "title": "Obsidian > Copy selection to another file",
+        "category": "Obsidian manager",
+        "icon": "$(file-add)"
+      },
+      {
+        "command": "obsidianManager.openFileFromView.context",
+        "title": "Open in Obsidian",
+        "category": "Obsidian manager",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "obsidianManager.createFileInFolder.context",
+        "title": "New note",
+        "category": "Obsidian manager",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "obsidianManager.createTodayFileInFolder",
+        "title": "Create today file in folder",
+        "category": "Obsidian manager",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "obsidianManager.createFolder.context",
+        "title": "New folder",
+        "category": "Obsidian manager",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "obsidianManager.renameItem.context",
+        "title": "Rename",
+        "category": "Obsidian manager",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "obsidianManager.duplicateItem.context",
+        "title": "Duplicate",
+        "category": "Obsidian manager",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "obsidianManager.deleteItem.context",
+        "title": "Delete",
+        "category": "Obsidian manager",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "obsidianManager.createTodayInRoot",
+        "title": "Create today in root",
+        "category": "Obsidian manager",
+        "icon": "$(calendar)"
+      },
+      {
+        "command": "obsidianManager.createFileInRoot",
+        "title": "New note in root",
+        "category": "Obsidian manager",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "obsidianManager.revealInFinder",
+        "title": "Reveal in Finder",
+        "category": "Obsidian manager",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "obsidianManager.openInEditMode",
+        "title": "1 - Open in Edit Mode",
+        "category": "Obsidian manager",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "obsidianManager.openInPreviewMode",
+        "title": "3 - Open in Preview Mode",
+        "category": "Obsidian manager",
+        "icon": "$(preview)"
+      },
+      {
+        "command": "obsidianManager.openInEditMode.context",
+        "title": "Open in Edit Mode",
+        "category": "Obsidian manager",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "obsidianManager.openInPreviewMode.context",
+        "title": "Open in Preview Mode",
+        "category": "Obsidian manager",
+        "icon": "$(preview)"
+      },
+      {
+        "command": "obsidianManager.openFileBeside.context",
+        "title": "Open Beside in Edit Mode",
+        "category": "Obsidian manager",
+        "icon": "$(split-horizontal)"
+      },
+      {
+        "command": "obsidianManager.openWikiLink",
+        "title": "Open Wiki Link",
+        "category": "Obsidian manager"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "obsidianManager.openFile.icon",
+          "when": "resourceExtname == .md || editorLangId == markdown",
+          "group": "navigation"
+        },
+        {
+          "command": "obsidianManager.linkDocument",
+          "when": "resourceExtname == .md || editorLangId == markdown",
+          "group": "navigation"
+        },
+        {
+          "command": "obsidianManager.duplicateFromEditor",
+          "when": "resourceExtname == .md || editorLangId == markdown",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "obsidianManager.createFileInFolder",
+          "when": "view == obsidianFiles && viewItem == obsidianFolder",
+          "group": "inline"
+        },
+        {
+          "command": "obsidianManager.createFolder",
+          "when": "view == obsidianFiles && viewItem == obsidianFolder",
+          "group": "inline"
+        },
+        {
+          "command": "obsidianManager.openInEditMode",
+          "when": "view == obsidianFiles && viewItem == obsidianFile",
+          "group": "inline"
+        },
+        {
+          "command": "obsidianManager.openInPreviewMode",
+          "when": "view == obsidianFiles && viewItem == obsidianFile",
+          "group": "inline"
+        },
+        {
+          "command": "obsidianManager.openFileBeside",
+          "when": "view == obsidianFiles && viewItem == obsidianFile",
+          "group": "inline"
+        },
+        {
+          "command": "obsidianManager.deleteItem",
+          "when": "view == obsidianFiles && viewItem == obsidianFile",
+          "group": "inline"
+        },
+        {
+          "command": "obsidianManager.deleteItem",
+          "when": "view == obsidianFiles && viewItem == obsidianFolder",
+          "group": "inline"
+        },
+        {
+          "command": "obsidianManager.openInEditMode.context",
+          "when": "view == obsidianFiles && viewItem == obsidianFile",
+          "group": "0_edit"
+        },
+        {
+          "command": "obsidianManager.openInPreviewMode.context",
+          "when": "view == obsidianFiles && viewItem == obsidianFile",
+          "group": "0_edit"
+        },
+        {
+          "command": "obsidianManager.openFileBeside.context",
+          "when": "view == obsidianFiles && viewItem == obsidianFile",
+          "group": "0_edit"
+        },
+        {
+          "command": "obsidianManager.openFileFromView.context",
+          "when": "view == obsidianFiles && viewItem == obsidianFile",
+          "group": "1_open"
+        },
+        {
+          "command": "obsidianManager.createFileInFolder.context",
+          "when": "view == obsidianFiles && viewItem == obsidianFolder",
+          "group": "1_create"
+        },
+        {
+          "command": "obsidianManager.createFolder.context",
+          "when": "view == obsidianFiles && viewItem == obsidianFolder",
+          "group": "1_create"
+        },
+        {
+          "command": "obsidianManager.revealInFinder",
+          "when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
+          "group": "2_calendar"
+        },
+        {
+          "command": "obsidianManager.renameItem.context",
+          "when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
+          "group": "3_modify@1"
+        },
+        {
+          "command": "obsidianManager.duplicateItem.context",
+          "when": "view == obsidianFiles && viewItem == obsidianFile",
+          "group": "3_modify@2"
+        },
+        {
+          "command": "obsidianManager.deleteItem.context",
+          "when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
+          "group": "3_modify@3"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "obsidianManager.linkDocument",
+          "when": "resourceExtname == .md || editorLangId == markdown",
+          "group": "obsidian"
+        },
+        {
+          "command": "obsidianManager.duplicateFromEditor",
+          "when": "resourceExtname == .md || editorLangId == markdown",
+          "group": "obsidian"
+        },
+        {
+          "command": "obsidianManager.includeClipboardCodeBlock",
+          "when": "resourceExtname == .md || editorLangId == markdown",
+          "group": "obsidian"
+        },
+        {
+          "command": "obsidianManager.putInsideCodeblock",
+          "when": "resourceExtname == .md || editorLangId == markdown",
+          "group": "obsidian"
+        },
+        {
+          "command": "obsidianManager.copySelectionToFile",
+          "when": "resourceExtname == .md || editorLangId == markdown && editorHasSelection",
+          "group": "obsidian"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "obsidianManager.createFolder",
+          "when": "view == obsidianFiles",
+          "group": "navigation@1"
+        },
+        {
+          "command": "obsidianManager.createFileInRoot",
+          "when": "view == obsidianFiles",
+          "group": "navigation@1"
+        },
+        {
+          "command": "obsidianManager.refreshView",
+          "when": "view == obsidianFiles",
+          "group": "navigation@2"
+        },
+        {
+          "command": "obsidianManager.toggleViewMode",
+          "when": "view == obsidianFiles && !obsidianManager.viewModeIsList",
+          "group": "navigation@2"
+        },
+        {
+          "command": "obsidianManager.toggleExpandAll",
+          "title": "Toggle expand/collapse all",
+          "when": "view == obsidianFiles",
+          "group": "navigation@2",
+          "icon": "$(collapse-all)"
+        },
+        {
+          "command": "obsidianManager.toggleViewMode",
+          "when": "view == obsidianFiles && obsidianManager.viewModeIsList",
+          "group": "navigation@2"
+        },
+        {
+          "command": "obsidianManager.openSettings",
+          "when": "view == obsidianFiles",
+          "group": "navigation@3"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Obsidian manager",
+      "properties": {
+        "obsidianManager.vault": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to your Obsidian vault folder. The sidebar view will read Markdown files from this folder and the extension will use this path when building obsidian:// links."
+        },
+        "obsidianManager.expandFoldersOnLoad": {
+          "type": "boolean",
+          "default": true,
+          "description": "If true the folders in the Obsidian view will be expanded by default when the view is shown."
+        },
+        "obsidianManager.showFolderTreeIcons": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show folder icons in the tree view next to folder names."
+        },
+        "obsidianManager.showFileTreeIcons": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show file icons in the tree view next to file names."
+        },
+        "obsidianManager.viewMode": {
+          "type": "string",
+          "enum": [
+            "folders",
+            "list"
+          ],
+          "default": "folders",
+          "description": "How to present files in the sidebar: 'folders' shows hierarchical folders, 'list' shows a flat list of Markdown files."
+        },
+        "obsidianManager.weekStartDay": {
+          "type": "string",
+          "enum": [
+            "sunday",
+            "monday"
+          ],
+          "default": "monday",
+          "description": "First day of the week in calendar: 'sunday' or 'monday'."
+        },
+        "obsidianManager.openFileMode": {
+          "type": "string",
+          "enum": [
+            "edit",
+            "preview"
+          ],
+          "default": "preview",
+          "description": "How files should be opened: 'edit' mode for immediate editing or 'preview' mode for read-only viewing."
+        },
+        "obsidianManager.newFileOpenMode": {
+          "type": "string",
+          "enum": [
+            "edit",
+            "preview"
+          ],
+          "default": "edit",
+          "description": "How newly created files should be opened: 'edit' for immediate editing or 'preview' for read-only viewing."
+        },
+        "obsidianManager.addTitleToNewFiles": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically add an H1 title (based on filename) as the first line when creating new files."
+        },
+        "obsidianManager.linkPreviewMode": {
+          "type": "string",
+          "enum": [
+            "full",
+            "lastSegment"
+          ],
+          "default": "full",
+          "description": "When pasting a URL as a link: 'full' shows the full URL as link text; 'lastSegment' shows only the last path segment/file name. Query strings and hashes are removed from the preview."
+        }
+      }
+    },
+    "keybindings": [
+      {
+        "command": "obsidianManager.linkDocument",
+        "key": "ctrl+shift+l",
+        "mac": "ctrl+shift+l",
+        "when": "editorTextFocus && resourceExtname == .md"
+      },
+      {
+        "command": "obsidianManager.includeClipboardCodeBlock",
+        "key": "ctrl+shift+v",
+        "mac": "ctrl+shift+v",
+        "when": "editorTextFocus && resourceExtname == .md"
+      },
+      {
+        "command": "obsidianManager.putInsideCodeblock",
+        "key": "ctrl+x",
+        "mac": "ctrl+x",
+        "when": "editorTextFocus && resourceExtname == .md"
+      },
+      {
+        "command": "obsidianManager.pasteAsLink",
+        "key": "ctrl+v",
+        "mac": "ctrl+v",
+        "when": "editorTextFocus && resourceExtname == .md"
+      },
+      {
+        "command": "editor.action.insertSnippet",
+        "args": {
+          "snippet": "**${TM_SELECTED_TEXT:$1}**$0"
+        },
+        "key": "ctrl+b",
+        "mac": "cmd+b",
+        "when": "editorTextFocus && resourceExtname == .md"
+      },
+      {
+        "command": "editor.action.insertSnippet",
+        "args": {
+          "snippet": "*${TM_SELECTED_TEXT:$1}*$0"
+        },
+        "key": "ctrl+i",
+        "mac": "cmd+i",
+        "when": "editorTextFocus && resourceExtname == .md"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "obsidianManager",
+          "title": "Obsidian",
+          "icon": "images/obsidian-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "obsidianManager": [
+        {
+          "id": "obsidianCalendar",
+          "name": "Calendar",
+          "type": "webview",
+          "visibility": "visible"
+        },
+        {
+          "id": "obsidianFiles",
+          "name": "Vault files",
+          "visibility": "visible"
+        }
+      ]
+    },
+    "markdown.markdownItPlugins": true,
+    "markdown.previewStyles": [
+      "./styles/markdown-preview.css"
+    ],
+    "markdown.previewScripts": [
+      "./styles/markdown-preview.js"
+    ]
+  }
 }
