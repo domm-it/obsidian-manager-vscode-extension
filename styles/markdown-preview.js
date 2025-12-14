@@ -118,6 +118,24 @@
         preElement.appendChild(copyButton);
     }
 
+    function smartCleanup() {
+        try {
+            // Remove only orphaned copy buttons (buttons without parent pre elements)
+            const copyButtons = document.querySelectorAll('.copy-button');
+            copyButtons.forEach(button => {
+                const preElement = button.closest('pre');
+                if (!preElement || !preElement.contains(button.previousElementSibling)) {
+                    button.remove();
+                }
+            });
+            
+        } catch (e) {
+            console.warn('Error in smartCleanup:', e);
+        }
+    }
+
+
+
     function addCopyButtonsToCodeBlocks() {
         try {
             const preElements = document.querySelectorAll('pre');
@@ -133,48 +151,82 @@
         }
     }
 
-    // Add copy buttons when DOM is ready
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', addCopyButtonsToCodeBlocks);
-    } else {
-        addCopyButtonsToCodeBlocks();
+    function initializeMarkdownEnhancements() {
+        try {
+            smartCleanup();  // Rimuovi solo elementi obsoleti
+            addCopyButtonsToCodeBlocks();  // Aggiungi solo bottoni mancanti
+        } catch (e) {
+            console.warn('Error in initializeMarkdownEnhancements:', e);
+        }
     }
 
-    // Re-add copy buttons when content changes (for dynamic updates)
+    // Add enhancements when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeMarkdownEnhancements);
+    } else {
+        initializeMarkdownEnhancements();
+    }
+
+    // Multiple strategies to catch content changes
     let debounceTimeout;
+    let lastContentCheck = '';
+    
+    function checkForContentChanges() {
+        try {
+            const currentContent = document.body.innerHTML;
+            if (currentContent !== lastContentCheck) {
+                lastContentCheck = currentContent;
+                
+                // Clear existing timeout
+                if (debounceTimeout) {
+                    clearTimeout(debounceTimeout);
+                }
+                
+                debounceTimeout = setTimeout(() => {
+                    try {
+                        initializeMarkdownEnhancements();
+                    } catch (e) {
+                        console.warn('Error in checkForContentChanges:', e);
+                    }
+                }, 500);
+            }
+        } catch (e) {
+            console.warn('Error in checkForContentChanges:', e);
+        }
+    }
+
+    // Strategy 1: MutationObserver
     const observer = new MutationObserver((mutations) => {
         let shouldUpdate = false;
         
-        // Clear existing timeout
-        if (debounceTimeout) {
-            clearTimeout(debounceTimeout);
-        }
-        
         mutations.forEach((mutation) => {
-            if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-                mutation.addedNodes.forEach((node) => {
-                    if (node.nodeType === 1) { // Element node
-                        if (node.tagName === 'PRE' || (node.querySelector && node.querySelector('pre'))) {
-                            shouldUpdate = true;
-                        }
-                    }
-                });
+            if (mutation.type === 'childList') {
+                shouldUpdate = true;
             }
         });
         
         if (shouldUpdate) {
-            // Debounce the update to avoid excessive calls
-            debounceTimeout = setTimeout(() => {
-                try {
-                    addCopyButtonsToCodeBlocks();
-                } catch (e) {
-                    console.warn('Error adding copy buttons:', e);
-                }
-            }, 200);
+            checkForContentChanges();
         }
     });
 
-    // Start observing with more specific options to reduce noise
+    // Strategy 2: Periodic check as fallback
+    function startPeriodicCheck() {
+        setInterval(checkForContentChanges, 2000);
+    }
+
+    // Strategy 3: Focus events (when user comes back to VS Code)
+    function setupFocusListener() {
+        try {
+            window.addEventListener('focus', () => {
+                setTimeout(checkForContentChanges, 100);
+            });
+        } catch (e) {
+            // Ignore if can't add focus listener
+        }
+    }
+
+    // Start all strategies
     try {
         if (document && document.body && typeof MutationObserver !== 'undefined') {
             observer.observe(document.body, {
@@ -184,14 +236,15 @@
                 characterData: false
             });
         }
+        
+        startPeriodicCheck();
+        setupFocusListener();
+        
     } catch (e) {
-        console.warn('Could not start MutationObserver:', e);
-        // If MutationObserver fails, try a simpler approach
-        try {
-            setTimeout(addCopyButtonsToCodeBlocks, 1000);
-        } catch (fallbackError) {
-            // If everything fails, just continue without dynamic updates
-        }
+        console.warn('Could not start change detection:', e);
+        // Fallback to just periodic check
+        setTimeout(initializeMarkdownEnhancements, 1000);
+        startPeriodicCheck();
     }
 
 })();
