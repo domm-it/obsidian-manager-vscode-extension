@@ -2,23 +2,26 @@
 # MARK: HIDE LINE NUMBERS
 ================================================================*/
 .code-line:before{
-    display: none !important;
+    border-color: #333 !important;
 }
 
 /*================================================================
 # MARK: TASK LIST STYLES
 ================================================================*/
 .task-list {
-    padding-left: 30px;
     margin-bottom: 0;
     display: flex;
     flex-direction: column;
     gap: 10px;
+    padding-left: 20px;
+    list-style-position: inside;
 }
 
-.task-list .task-list-item:not(:last-child) {
-    border-bottom: 1px dashed #555;
-    padding-bottom: 10px;
+.task-list .task-list-item {
+    list-style: none !important;
+}
+
+.task-list:not(.code-line){
     display: flex;
     flex-direction: column;
     gap: 5px;
@@ -26,6 +29,7 @@
 
 .task-list .task-list-item:not(:last-child) {
     border-bottom: 1px dashed #555;
+    padding-bottom: 10px;
 }
 
 .task-list .task-list-item:last-child {
@@ -34,6 +38,10 @@
 
 .task-list .code-line {
     margin-bottom: 0 !important;
+}
+
+ul.task-list {
+    margin-top: 5px;
 }
 
 /*================================================================
@@ -113,7 +121,7 @@ input[type='checkbox'] {
     --active-inner: var(--vscode-checkbox-foreground, var(--vscode-button-foreground));
     --focus: 2px var(--vscode-focusBorder, rgba(0,122,204,0.3));
     --border: #555;
-    --border-hover: var(--vscode-checkbox-border, var(--vscode-editorWidget-border));
+    --border-hover: var(--vscode-textLink-foreground);
     --background: var(--vscode-editor-background);
     --disabled: var(--vscode-disabledForeground, #888);
     --disabled-inner: var(--vscode-editor-background);
@@ -128,7 +136,7 @@ input[type='checkbox'] {
     vertical-align: top;
     position: relative;
     margin: 0;
-    margin-right: 5px;
+    margin-right: 8px;
     cursor: pointer;
     border: 1px solid var(--bc);
     background: var(--b);
