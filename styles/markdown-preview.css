@@ -1,10 +1,15 @@
-/* Copy button for code blocks in markdown preview */
-.code-block-container {
-    position: relative;
+/*================================================================
+# MARK: HIDE LINE NUMBERS
+================================================================*/
+.code-line:before{
+    display: none !important;
 }
 
+/*================================================================
+# MARK: TASK LIST STYLES
+================================================================*/
 .task-list {
-    padding-left: 16px;
+    padding-left: 30px;
     margin-bottom: 0;
     display: flex;
     flex-direction: column;
@@ -13,15 +18,27 @@
 
 .task-list .task-list-item:not(:last-child) {
     border-bottom: 1px dashed #555;
+    padding-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
 }
 
-pre {
-    position: relative;
-    margin: 10px 0;
-    border-radius: 5px !important;
-    border: 1px solid #333
+.task-list .task-list-item:not(:last-child) {
+    border-bottom: 1px dashed #555;
 }
 
+.task-list .task-list-item:last-child {
+    margin-bottom: 10px;
+}
+
+.task-list .code-line {
+    margin-bottom: 0 !important;
+}
+
+/*================================================================
+# MARK: COPY BUTTON STYLES
+================================================================*/
 .copy-button {
     position: absolute;
     top: 8px;
@@ -50,14 +67,25 @@ pre {
     background: var(--vscode-button-secondaryBackground);
 }
 
-
-
 .copy-button.copied {
     background: var(--vscode-inputValidation-infoBackground);
     color: var(--vscode-inputValidation-infoForeground);
 }
 
-/* Hide copy button by default, show on hover */
+/*================================================================
+# MARK: CODE BLOCK STYLES
+================================================================*/
+pre {
+    position: relative;
+    margin: 10px 0;
+    border-radius: 5px !important;
+    border: 1px solid #333
+}
+
+.code-block-container {
+    position: relative;
+}
+
 pre .copy-button {
     opacity: 0;
     pointer-events: none;
@@ -72,8 +100,92 @@ pre:hover .copy-button:hover {
     opacity: 1;
 }
 
-/* Ensure code blocks have proper positioning context */
 pre > code {
     display: block;
     padding-right: 60px; /* Make space for copy button */
+}
+
+/*================================================================
+# MARK: CHECKBOX STYLES
+================================================================*/
+input[type='checkbox'] {
+    --active: var(--vscode-checkbox-background, var(--vscode-button-background));
+    --active-inner: var(--vscode-checkbox-foreground, var(--vscode-button-foreground));
+    --focus: 2px var(--vscode-focusBorder, rgba(0,122,204,0.3));
+    --border: #555;
+    --border-hover: var(--vscode-checkbox-border, var(--vscode-editorWidget-border));
+    --background: var(--vscode-editor-background);
+    --disabled: var(--vscode-disabledForeground, #888);
+    --disabled-inner: var(--vscode-editor-background);
+    --b: var(--background);
+    --bc: var(--border);
+    appearance: none;
+    height: 18px;
+    width: 18px;
+    border-radius: 3px;
+    outline: none;
+    display: inline-block;
+    vertical-align: top;
+    position: relative;
+    margin: 0;
+    margin-right: 5px;
+    cursor: pointer;
+    border: 1px solid var(--bc);
+    background: var(--b);
+    transition:
+        background 0.3s,
+        border-color 0.3s,
+        box-shadow 0.2s;
+}
+
+input[type='checkbox']::after {
+    content: '';
+    display: block;
+    position: absolute;
+    left: 5px;
+    top: 1px;
+    width: 4px;
+    height: 8px;
+    border: 3px solid var(--active-inner);
+    border-top: 0;
+    border-left: 0;
+    opacity: var(--o, 0);
+    transform: rotate(var(--r, 20deg));
+}
+
+input[type='checkbox']:checked {
+    --b: var(--vscode-textLink-foreground);
+    --bc: var(--vscode-textLink-foreground);
+    --o: 1;
+    --r: 43deg;
+    --d-o: 0.3s;
+    --d-t: 0.6s;
+    --d-t-e: cubic-bezier(0.2, 0.85, 0.32, 1.2);
+}
+
+input[type='checkbox']:disabled {
+    --b: var(--disabled);
+    cursor: not-allowed;
+    opacity: 0.9;
+}
+
+input[type='checkbox']:disabled:checked {
+    --b: var(--disabled-inner);
+    --bc: var(--border);
+}
+
+input[type='checkbox']:hover:not(:checked):not(:disabled) {
+    --bc: var(--border-hover);
+}
+
+input[type='checkbox']:focus {
+    box-shadow: 0 0 0 var(--focus);
+}
+
+label {
+    display: inline-flex;
+    cursor: pointer;
+    gap: var(--padding, 6px);
+    align-items: center;
+    width: fit-content;
 }
