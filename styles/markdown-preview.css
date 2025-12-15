@@ -23,7 +23,7 @@ ol li::marker{
 # MARK: TASK LIST STYLES
 ================================================================*/
 .task-list {
-    margin-bottom: 0;
+    margin-bottom: 10px;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -205,9 +205,7 @@ input[type='checkbox']:focus {
 }
 
 label {
-    display: inline-flex;
     cursor: pointer;
     gap: var(--padding, 6px);
-    align-items: center;
     width: fit-content;
 }
