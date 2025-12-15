@@ -10,7 +10,6 @@
 ================================================================*/
 ol {
     padding-left: 20px;
-    list-style-position: inside;
 }
 
 ul li::marker,
