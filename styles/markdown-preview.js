@@ -130,12 +130,13 @@
     // region - ADD COPY TO SHORT-CODE
     ================================================================*/
     function addCopyToShortCode() {
-        console.log('TESTX', 'start');
-        if (document.querySelector('.short-code-copy-button')) {
+        if (document.querySelector('.short-code-container')) {
             return;
         }
 
-        const codeElements = document.querySelectorAll('p>code');
+        const codeElements = Array.from(document.querySelectorAll('code')).filter(
+            code => !code.closest('pre')
+        );
         console.log('TESTX', codeElements);
         if (!codeElements) {
             return;
