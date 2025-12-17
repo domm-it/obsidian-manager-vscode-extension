@@ -209,3 +209,29 @@ label {
     gap: var(--padding, 6px);
     width: fit-content;
 }
+
+/*================================================================
+# MARK: CODE
+================================================================*/
+.short-code-container {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    background-color: #3A3D40;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.short-code-container .short-code-copy-icon,
+.short-code-container .short-code-check-icon{
+    display: none;
+    align-items: center;
+}
+
+.short-code-container.copying .short-code-check-icon{
+    display: inline-flex;
+}
+
+.short-code-container:not(.copying):hover .short-code-copy-icon{
+    display: inline-flex;
+}

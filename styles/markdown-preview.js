@@ -1,6 +1,10 @@
 // Add copy buttons to code blocks in markdown preview
 (function() {
     'use strict';
+
+    // Multiple strategies to catch content changes
+    let debounceTimeout;
+    let lastContentCheck = '';
     
     // Safety check - exit early if we're in an unsafe context
     if (!window || !document || !document.body) {
@@ -17,55 +21,190 @@
         // If we can't add error listener, continue without it
     }
 
+    // Add enhancements when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeMarkdownEnhancements);
+    } else {
+        initializeMarkdownEnhancements();
+    }
 
-
-    function copyToClipboard(text) {
-        return new Promise((resolve, reject) => {
-            try {
-                // Check if we have access to clipboard API
-                if (navigator && navigator.clipboard && window.isSecureContext) {
-                    navigator.clipboard.writeText(text).then(resolve).catch(() => {
-                        // Fallback if clipboard API fails
-                        fallbackCopy(text, resolve, reject);
-                    });
-                } else {
-                    fallbackCopy(text, resolve, reject);
-                }
-            } catch (e) {
-                fallbackCopy(text, resolve, reject);
+    /*================================================================
+    // region - MUTATION OBSERVER
+    ================================================================*/
+    const observer = new MutationObserver((mutations) => {
+        let shouldUpdate = false;
+        
+        mutations.forEach((mutation) => {
+            if (mutation.type === 'childList') {
+                shouldUpdate = true;
             }
         });
-    }
-    
-    function fallbackCopy(text, resolve, reject) {
+        
+        if (shouldUpdate) {
+            checkForContentChanges();
+        }
+    });
+
+        function checkForContentChanges() {
         try {
-            if (!document || !document.body) {
-                reject(new Error('Document not available'));
-                return;
+            const currentContent = document.body.innerHTML;
+            if (currentContent !== lastContentCheck) {
+                lastContentCheck = currentContent;
+                
+                // Clear existing timeout
+                if (debounceTimeout) {
+                    clearTimeout(debounceTimeout);
+                }
+                
+                debounceTimeout = setTimeout(() => {
+                    try {
+                        initializeMarkdownEnhancements();
+                    } catch (e) {
+                        console.warn('Error in checkForContentChanges:', e);
+                    }
+                }, 500);
             }
-            
-            const textArea = document.createElement('textarea');
-            textArea.value = text;
-            textArea.style.cssText = 'position:absolute;left:-9999px;top:-9999px;opacity:0;';
-            textArea.setAttribute('readonly', '');
-            
-            document.body.appendChild(textArea);
-            textArea.select();
-            textArea.setSelectionRange(0, text.length);
-            
-            const successful = document.execCommand('copy');
-            document.body.removeChild(textArea);
-            
-            if (successful) {
-                resolve();
-            } else {
-                reject(new Error('Copy command failed'));
-            }
-        } catch (err) {
-            reject(err);
+        } catch (e) {
+            console.warn('Error in checkForContentChanges:', e);
         }
     }
 
+    function startPeriodicCheck() {
+        setInterval(checkForContentChanges, 2000);
+    }
+
+    function setupFocusListener() {
+        try {
+            window.addEventListener('focus', () => {
+                setTimeout(checkForContentChanges, 100);
+            });
+        } catch (e) {
+            // Ignore if can't add focus listener
+        }
+    }
+
+    // Start all strategies
+    try {
+        if (document && document.body && typeof MutationObserver !== 'undefined') {
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true,
+                attributes: false,
+                characterData: false
+            });
+        }
+        
+        startPeriodicCheck();
+        setupFocusListener();
+        
+    } catch (e) {
+        console.warn('Could not start change detection:', e);
+        // Fallback to just periodic check
+        setTimeout(initializeMarkdownEnhancements, 1000);
+        startPeriodicCheck();
+    }
+
+    /*================================================================
+    // region - INIT
+    ================================================================*/
+    function initializeMarkdownEnhancements() {
+        try {
+            // Re-create all copyButtons
+            const copyButtons = document.querySelectorAll('.copy-button');
+            copyButtons.forEach(button => {
+                const preElement = button.closest('pre');
+                if (!preElement || !preElement.contains(button.previousElementSibling)) {
+                    button.remove();
+                }
+            });
+            addCopyButtonsToCodeBlocks();
+
+            addCopyToShortCode();
+
+        } catch (e) {
+            console.warn('Error in initializeMarkdownEnhancements:', e);
+        }
+    }
+
+    /*================================================================
+    // region - ADD COPY TO SHORT-CODE
+    ================================================================*/
+    function addCopyToShortCode() {
+        console.log('TESTX', 'start');
+        if (document.querySelector('.short-code-copy-button')) {
+            return;
+        }
+
+        const codeElements = document.querySelectorAll('p>code');
+        console.log('TESTX', codeElements);
+        if (!codeElements) {
+            return;
+        }
+        codeElements.forEach((codeElement) => {
+            // Create wrapper span
+            const wrapper = document.createElement('span');
+            wrapper.className = 'short-code-container';
+
+            // Clone the code element to preserve events/styles
+            const codeClone = codeElement.cloneNode(true);
+
+            // Create SVG icon for copy
+            const copyIconWrapper = document.createElement('span');
+            copyIconWrapper.className = 'short-code-copy-icon';
+
+            const svgCopy = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svgCopy.setAttribute('width', '16');
+            svgCopy.setAttribute('height', '16');
+            svgCopy.setAttribute('viewBox', '0 0 16 16');
+            svgCopy.innerHTML = `
+                <rect fill="none" x="4" y="4" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1"/>
+                <rect fill="none" x="2" y="2" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1"/>
+            `;
+            copyIconWrapper.appendChild(svgCopy);
+            
+            // SVG icon for check
+            const checkIconWrapper = document.createElement('span');
+            checkIconWrapper.className = 'short-code-check-icon';
+            const svgCheck = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svgCheck.setAttribute('width', '16');
+            svgCheck.setAttribute('height', '16');
+            svgCheck.setAttribute('viewBox', '0 0 16 16');
+            svgCheck.innerHTML = `
+                <polyline points="4,9 7,12 12,5" stroke="currentColor" stroke-width="2" fill="none" />
+            `;
+            checkIconWrapper.appendChild(svgCheck);
+
+            // Make the whole container clickable for copy
+            wrapper.addEventListener('click', async (e) => {
+                wrapper.classList.add('copying');
+                e.preventDefault();
+                e.stopPropagation();
+                try {
+                    await copyToClipboard(codeElement.textContent || '');
+                    setTimeout(() => {
+                        wrapper.classList.remove('copying');
+                    }, 2000);
+                } catch (err) {
+                    // Optionally show error feedback
+                }
+            });
+
+            // Build wrapper
+            wrapper.appendChild(codeClone);
+            wrapper.appendChild(checkIconWrapper);
+            wrapper.appendChild(copyIconWrapper);
+
+            // Replace original code element with wrapper
+            const parent = codeElement.parentNode;
+            if (parent) {
+                parent.replaceChild(wrapper, codeElement);
+            }
+        });
+    }
+
+    /*================================================================
+    // region - ADD COPY BUTTON
+    ================================================================*/
     function addCopyButton(preElement) {
         // Skip if button already exists
         if (preElement.querySelector('.copy-button')) {
@@ -118,24 +257,6 @@
         preElement.appendChild(copyButton);
     }
 
-    function smartCleanup() {
-        try {
-            // Remove only orphaned copy buttons (buttons without parent pre elements)
-            const copyButtons = document.querySelectorAll('.copy-button');
-            copyButtons.forEach(button => {
-                const preElement = button.closest('pre');
-                if (!preElement || !preElement.contains(button.previousElementSibling)) {
-                    button.remove();
-                }
-            });
-            
-        } catch (e) {
-            console.warn('Error in smartCleanup:', e);
-        }
-    }
-
-
-
     function addCopyButtonsToCodeBlocks() {
         try {
             const preElements = document.querySelectorAll('pre');
@@ -151,100 +272,54 @@
         }
     }
 
-    function initializeMarkdownEnhancements() {
-        try {
-            smartCleanup();  // Rimuovi solo elementi obsoleti
-            addCopyButtonsToCodeBlocks();  // Aggiungi solo bottoni mancanti
-        } catch (e) {
-            console.warn('Error in initializeMarkdownEnhancements:', e);
-        }
-    }
-
-    // Add enhancements when DOM is ready
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initializeMarkdownEnhancements);
-    } else {
-        initializeMarkdownEnhancements();
-    }
-
-    // Multiple strategies to catch content changes
-    let debounceTimeout;
-    let lastContentCheck = '';
-    
-    function checkForContentChanges() {
-        try {
-            const currentContent = document.body.innerHTML;
-            if (currentContent !== lastContentCheck) {
-                lastContentCheck = currentContent;
-                
-                // Clear existing timeout
-                if (debounceTimeout) {
-                    clearTimeout(debounceTimeout);
+    /*================================================================
+    // region - COPY FUNCTIONS
+    ================================================================*/
+    function copyToClipboard(text) {
+        return new Promise((resolve, reject) => {
+            try {
+                // Check if we have access to clipboard API
+                if (navigator && navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(text).then(resolve).catch(() => {
+                        // Fallback if clipboard API fails
+                        fallbackCopy(text, resolve, reject);
+                    });
+                } else {
+                    fallbackCopy(text, resolve, reject);
                 }
-                
-                debounceTimeout = setTimeout(() => {
-                    try {
-                        initializeMarkdownEnhancements();
-                    } catch (e) {
-                        console.warn('Error in checkForContentChanges:', e);
-                    }
-                }, 500);
-            }
-        } catch (e) {
-            console.warn('Error in checkForContentChanges:', e);
-        }
-    }
-
-    // Strategy 1: MutationObserver
-    const observer = new MutationObserver((mutations) => {
-        let shouldUpdate = false;
-        
-        mutations.forEach((mutation) => {
-            if (mutation.type === 'childList') {
-                shouldUpdate = true;
+            } catch (e) {
+                fallbackCopy(text, resolve, reject);
             }
         });
-        
-        if (shouldUpdate) {
-            checkForContentChanges();
-        }
-    });
-
-    // Strategy 2: Periodic check as fallback
-    function startPeriodicCheck() {
-        setInterval(checkForContentChanges, 2000);
     }
-
-    // Strategy 3: Focus events (when user comes back to VS Code)
-    function setupFocusListener() {
+    
+    function fallbackCopy(text, resolve, reject) {
         try {
-            window.addEventListener('focus', () => {
-                setTimeout(checkForContentChanges, 100);
-            });
-        } catch (e) {
-            // Ignore if can't add focus listener
+            if (!document || !document.body) {
+                reject(new Error('Document not available'));
+                return;
+            }
+            
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            textArea.style.cssText = 'position:absolute;left:-9999px;top:-9999px;opacity:0;';
+            textArea.setAttribute('readonly', '');
+            
+            document.body.appendChild(textArea);
+            textArea.select();
+            textArea.setSelectionRange(0, text.length);
+            
+            const successful = document.execCommand('copy');
+            document.body.removeChild(textArea);
+            
+            if (successful) {
+                resolve();
+            } else {
+                reject(new Error('Copy command failed'));
+            }
+        } catch (err) {
+            reject(err);
         }
-    }
-
-    // Start all strategies
-    try {
-        if (document && document.body && typeof MutationObserver !== 'undefined') {
-            observer.observe(document.body, {
-                childList: true,
-                subtree: true,
-                attributes: false,
-                characterData: false
-            });
-        }
-        
-        startPeriodicCheck();
-        setupFocusListener();
-        
-    } catch (e) {
-        console.warn('Could not start change detection:', e);
-        // Fallback to just periodic check
-        setTimeout(initializeMarkdownEnhancements, 1000);
-        startPeriodicCheck();
     }
 
 })();
