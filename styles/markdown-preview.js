@@ -137,7 +137,6 @@
         const codeElements = Array.from(document.querySelectorAll('code')).filter(
             code => !code.closest('pre')
         );
-        console.log('TESTX', codeElements);
         if (!codeElements) {
             return;
         }
