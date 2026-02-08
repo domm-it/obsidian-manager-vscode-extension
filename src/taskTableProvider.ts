@@ -855,6 +855,28 @@ export class TaskTableProvider {
       if (e.key === 'Enter' && e.target.classList.contains('task-input')) {
         e.target.blur();
       }
+      
+      // Tab key on inputs - save and create new task after
+      if (e.key === 'Tab' && e.target.classList.contains('task-input')) {
+        e.preventDefault();
+        
+        const row = e.target.closest('tr');
+        if (!row) return;
+        
+        const taskId = row.getAttribute('data-task-id');
+        if (!taskId) return;
+        
+        // Trigger save by blurring current input
+        e.target.blur();
+        
+        // Create new task after current one
+        setTimeout(() => {
+          vscode.postMessage({
+            command: 'addTaskAfter',
+            taskId: taskId
+          });
+        }, 50);
+      }
     });
     
     // Click on open-file icon
@@ -941,7 +963,6 @@ export class TaskTableProvider {
       \`).join('');
       
       console.log('Table rebuilt with', tasks.length, 'tasks');
-      console.log('Delete buttons found:', document.querySelectorAll('.delete-btn').length);
       
       // Reapply filter
       applyFilter();
@@ -952,7 +973,7 @@ export class TaskTableProvider {
         document.querySelectorAll('th.sortable').forEach(h => {
           h.classList.remove('sorted-asc', 'sorted-desc');
         });
-        const header = document.querySelector(\`th[data-column="\${currentSort.column}"]\`);
+        const header = document.querySelector('th[data-column="' + currentSort.column + '"]');
         if (header) {
           header.classList.add('sorted-' + currentSort.direction);
         }
