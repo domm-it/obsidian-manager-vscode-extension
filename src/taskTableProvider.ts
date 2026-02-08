@@ -20,7 +20,7 @@ export class TaskTableProvider {
 
   constructor(private context: vscode.ExtensionContext) {}
 
-  public async show(filterDate?: string, filterProject?: string, filterHashtag?: string) {
+  public async show(filterDate?: string, filterProject?: string, filterHashtag?: string, filterFile?: string) {
     // Get vault path from configuration
     const cfg = vscode.workspace.getConfiguration('obsidianManager');
     this.vaultPath = (cfg.get<string>('vault') || '').trim();
@@ -117,8 +117,8 @@ export class TaskTableProvider {
     this.updateWebview();
     
     // Apply initial filters if provided
-    if (filterDate || filterProject || filterHashtag) {
-      this.sendTasksUpdate(undefined, filterDate, filterProject, filterHashtag);
+    if (filterDate || filterProject || filterHashtag || filterFile) {
+      this.sendTasksUpdate(undefined, filterDate, filterProject, filterHashtag, filterFile);
     }
   }
 
@@ -667,7 +667,7 @@ export class TaskTableProvider {
     this.panel.webview.html = this.getWebviewContent();
   }
 
-  private sendTasksUpdate(focusTaskId?: string, filterDate?: string, filterProject?: string, filterHashtag?: string) {
+  private sendTasksUpdate(focusTaskId?: string, filterDate?: string, filterProject?: string, filterHashtag?: string, filterFile?: string) {
     if (!this.panel) {
       return;
     }
@@ -680,7 +680,8 @@ export class TaskTableProvider {
       focusTaskId: focusTaskId,
       filterDate: filterDate,
       filterProject: filterProject,
-      filterHashtag: filterHashtag
+      filterHashtag: filterHashtag,
+      filterFile: filterFile
     });
   }
 
@@ -1236,6 +1237,9 @@ export class TaskTableProvider {
             <button class="clear-btn" id="clearFile" title="Clear file filter">×</button>
           </fieldset>
         </div>
+        <div class="filter-group">
+          <button id="resetAllFilters" title="Reset all filters" style="padding: 4px 12px; cursor: pointer; background-color: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 2px;">RESET</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1727,6 +1731,17 @@ export class TaskTableProvider {
           filterApplied = true;
         }
         
+        // Apply file filter if provided
+        if (message.filterFile) {
+          currentFileFilter = [message.filterFile];
+          const fileFilterDisplay = document.getElementById('fileFilterDisplay');
+          if (fileFilterDisplay) {
+            fileFilterDisplay.value = message.filterFile;
+            fileFilterDisplay.placeholder = '';
+          }
+          filterApplied = true;
+        }
+        
         // Always apply filter at the end to ensure table is properly filtered
         if (filterApplied) {
           applyFilter();
@@ -1957,6 +1972,48 @@ export class TaskTableProvider {
         fileFilterDisplay.value = '';
         fileFilterDisplay.placeholder = 'All Files';
       }
+      applyFilter();
+    });
+    
+    // Reset all filters button
+    document.getElementById('resetAllFilters')?.addEventListener('click', function() {
+      // Clear search
+      const searchInput = document.getElementById('searchInput');
+      if (searchInput) {
+        searchInput.value = '';
+        currentSearchText = '';
+      }
+      
+      // Clear date
+      const dateInput = document.getElementById('dateFilter');
+      if (dateInput) {
+        dateInput.value = '';
+        currentDateFilter = '';
+      }
+      
+      // Clear project
+      currentFilter = [];
+      const projectFilterDisplay = document.getElementById('projectFilterDisplay');
+      if (projectFilterDisplay) {
+        projectFilterDisplay.value = '';
+        projectFilterDisplay.placeholder = 'All Projects';
+      }
+      
+      // Clear file
+      currentFileFilter = [];
+      const fileFilterDisplay = document.getElementById('fileFilterDisplay');
+      if (fileFilterDisplay) {
+        fileFilterDisplay.value = '';
+        fileFilterDisplay.placeholder = 'All Files';
+      }
+      
+      // Reset hide completed to default
+      const hideCompletedCheckbox = document.getElementById('hideCompleted');
+      if (hideCompletedCheckbox) {
+        hideCompletedCheckbox.checked = ${hideCompletedDefault};
+        currentHideCompleted = ${hideCompletedDefault};
+      }
+      
       applyFilter();
     });
     

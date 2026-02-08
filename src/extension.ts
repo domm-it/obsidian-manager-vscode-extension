@@ -2535,6 +2535,24 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   context.subscriptions.push(showTaskTableForProjectCmd);
 
+  // Filter Task Table by specific file
+  const filterTasksByFileCmd = vscode.commands.registerCommand('obsidianManager.filterTasksByFile', async (...args: any[]) => {
+    // Extract file URI from args (TreeItem or Uri)
+    let fileUri: vscode.Uri | undefined;
+    const first = args && args[0];
+    if (first instanceof vscode.Uri) {
+      fileUri = first;
+    } else if (first?.resourceUri instanceof vscode.Uri) {
+      fileUri = first.resourceUri;
+    }
+    
+    if (fileUri) {
+      const fileName = path.basename(fileUri.fsPath);
+      await taskTableProvider.show(undefined, undefined, undefined, fileName);
+    }
+  });
+  context.subscriptions.push(filterTasksByFileCmd);
+
   // Refresh hashtags command
   const refreshHashtagsCmd = vscode.commands.registerCommand('obsidianManager.refreshHashtags', async () => {
     hashtagProvider.refresh();

@@ -79,6 +79,12 @@
         "icon": "$(split-horizontal)"
       },
       {
+        "command": "obsidianManager.filterTasksByFile",
+        "title": "Filter Task Table by File",
+        "category": "Obsidian manager",
+        "icon": "$(table)"
+      },
+      {
         "command": "obsidianManager.pasteAsLink",
         "title": "Obsidian > Paste as link",
         "category": "Obsidian manager",
@@ -332,12 +338,7 @@
           "group": "inline"
         },
         {
-          "command": "obsidianManager.openInEditMode",
-          "when": "view == obsidianFiles && viewItem == obsidianFile",
-          "group": "inline"
-        },
-        {
-          "command": "obsidianManager.openInPreviewMode",
+          "command": "obsidianManager.filterTasksByFile",
           "when": "view == obsidianFiles && viewItem == obsidianFile",
           "group": "inline"
         },
