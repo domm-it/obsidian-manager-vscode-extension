@@ -184,7 +184,7 @@ export class ObsidianTreeProvider implements vscode.TreeDataProvider<ObsidianNod
       const entries = await fs.readdir(dir, { withFileTypes: true });
       const nodes: ObsidianNode[] = [];
       for (const e of entries) {
-        if (e.name.startsWith('.')) continue;
+        if (e.name.startsWith('.') || e.name === '@eaDir') continue;
         const full = path.join(dir, e.name);
         if (e.isDirectory()) {
           nodes.push({ resourceUri: vscode.Uri.file(full), isDirectory: true });

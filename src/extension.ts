@@ -397,6 +397,13 @@ class WikiLinkProvider implements vscode.DocumentLinkProvider {
     const links: vscode.DocumentLink[] = [];
     const text = document.getText();
     
+    // Get vault configuration
+    const cfg = vscode.workspace.getConfiguration('obsidianManager');
+    const configuredVault = ((cfg.get<string>('vault') || '')).trim();
+    if (!configuredVault) {
+      return links; // No vault configured, no links
+    }
+    
     // Regex to find wiki-links [[text]]
     const wikiLinkRegex = /\[\[([^\]]+)\]\]/g;
     let match;
@@ -412,12 +419,21 @@ class WikiLinkProvider implements vscode.DocumentLinkProvider {
         target = linkText.split('|')[0].trim();
       }
       
-      // Create URI for the direct command (no dialogs)
-      const uri = vscode.Uri.parse(`command:obsidianManager.openWikiLinkDirect?${encodeURIComponent(JSON.stringify([target, false]))}`);
+      // Clean target
+      let cleanTarget = target.trim();
+      if (cleanTarget.endsWith('.md')) {
+        cleanTarget = cleanTarget.slice(0, -3);
+      }
+      
+      // Resolve absolute path
+      const fullPath = path.join(configuredVault, `${cleanTarget}.md`);
+      
+      // Create URI for the file directly (not via command)
+      const fileUri = vscode.Uri.file(fullPath);
       
       const documentLink = new vscode.DocumentLink(
         new vscode.Range(startPos, endPos),
-        uri
+        fileUri
       );
       
       documentLink.tooltip = `Click to open "${target}"`;
