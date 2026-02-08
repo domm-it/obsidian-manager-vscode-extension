@@ -65,6 +65,12 @@ export class TaskTableProvider {
                 await this.updateTaskText(message.taskId, message.newText);
               }
               break;
+            case 'openFile':
+              if (message.filePath && message.lineNumber !== undefined) {
+                console.log('Open file:', message.filePath, 'at line:', message.lineNumber);
+                await this.openFileAtLine(message.filePath, message.lineNumber);
+              }
+              break;
           }
         },
         undefined,
@@ -229,6 +235,21 @@ export class TaskTableProvider {
     }
   }
 
+  private async openFileAtLine(filePath: string, lineNumber: number) {
+    try {
+      const doc = await vscode.workspace.openTextDocument(filePath);
+      const editor = await vscode.window.showTextDocument(doc);
+      
+      // Move cursor to the specified line
+      const position = new vscode.Position(lineNumber, 0);
+      editor.selection = new vscode.Selection(position, position);
+      editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
+      
+    } catch (error) {
+      vscode.window.showErrorMessage(`Error opening file: ${error}`);
+    }
+  }
+
   private updateWebview() {
     if (!this.panel) {
       return;
@@ -311,6 +332,13 @@ export class TaskTableProvider {
     .header h1 {
       font-size: 24px;
       font-weight: 600;
+      margin: 0;
+    }
+    
+    .task-count {
+      color: var(--vscode-descriptionForeground);
+      font-size: 14px;
+      margin-left: 12px;
     }
     
     .filters {
@@ -357,6 +385,65 @@ export class TaskTableProvider {
       outline: 1px solid var(--vscode-focusBorder);
     }
     
+    .filters input[type="date"] {
+      padding: 4px 8px;
+      background-color: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      border: 1px solid var(--vscode-input-border);
+      border-radius: 2px;
+      min-width: 140px;
+    }
+    
+    .filters input[type="date"]:focus {
+      outline: 1px solid var(--vscode-focusBorder);
+    }
+    
+    .input-with-clear {
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--vscode-input-border);
+      border-radius: 2px;
+      background-color: var(--vscode-input-background);
+      padding: 0;
+      margin: 0;
+    }
+    
+    .input-with-clear input[type="text"],
+    .input-with-clear input[type="date"],
+    .input-with-clear select {
+      border: none;
+      min-width: auto;
+    }
+    
+    .input-with-clear input[type="text"] {
+      width: 200px;
+    }
+    
+    .input-with-clear input[type="date"] {
+      width: 140px;
+    }
+    
+    .input-with-clear select {
+      width: 150px;
+      background-color: transparent;
+    }
+    
+    .clear-btn {
+      cursor: pointer;
+      color: var(--vscode-descriptionForeground);
+      font-size: 16px;
+      padding: 4px 8px;
+      background: transparent;
+      border: none;
+      opacity: 0.6;
+      margin: 0;
+    }
+    
+    .clear-btn:hover {
+      opacity: 1;
+      color: var(--vscode-errorForeground);
+    }
+    
     table {
       width: 100%;
       border-collapse: collapse;
@@ -364,10 +451,11 @@ export class TaskTableProvider {
     }
     
     thead {
-      background-color: var(--vscode-editor-lineHighlightBackground);
+      background-color: var(--vscode-editor-background);
       position: sticky;
       top: 0;
       z-index: 10;
+      box-shadow: 0 1px 0 var(--vscode-panel-border);
     }
     
     th {
@@ -407,6 +495,14 @@ export class TaskTableProvider {
       background-color: var(--vscode-list-hoverBackground);
     }
     
+    tbody tr:nth-child(even) {
+      background-color: rgba(255, 255, 255, 0.03);
+    }
+    
+    tbody tr:nth-child(odd) {
+      background-color: rgba(0, 0, 0, 0.05);
+    }
+    
     .status-cell {
       text-align: center;
       width: 40px;
@@ -415,16 +511,45 @@ export class TaskTableProvider {
     .date-cell {
       width: 120px;
       font-family: monospace;
+      cursor: pointer;
+      color: var(--vscode-textLink-foreground);
+    }
+    
+    .date-cell:hover {
+      text-decoration: underline;
     }
     
     .project-cell {
       width: 150px;
       font-weight: 500;
       color: var(--vscode-textLink-foreground);
+      cursor: pointer;
+    }
+    
+    .project-cell:hover {
+      text-decoration: underline;
     }
     
     .task-cell {
       width: auto;
+    }
+    
+    .task-cell-content {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .open-file-icon {
+      cursor: pointer;
+      color: var(--vscode-textLink-foreground);
+      font-size: 14px;
+      opacity: 0.6;
+      flex-shrink: 0;
+    }
+    
+    .open-file-icon:hover {
+      opacity: 1;
     }
     
     .actions-cell {
@@ -480,18 +605,33 @@ export class TaskTableProvider {
 </head>
 <body>
   <div class="header">
-    <h1>📋 Obsidian Tasks</h1>
+    <div>
+      <h1>Tasks <span class="task-count" id="taskCount"></span></h1>
+    </div>
     <div class="filters">
       <div class="filter-group">
         <label for="searchInput">Search:</label>
-        <input type="text" id="searchInput" placeholder="Filter by task, project or date..." />
+        <fieldset class="input-with-clear">
+          <input type="text" id="searchInput" placeholder="Filter by task, project or date..." />
+          <button class="clear-btn" id="clearSearch" title="Clear search">×</button>
+        </fieldset>
+      </div>
+      <div class="filter-group">
+        <label for="dateFilter">Date:</label>
+        <fieldset class="input-with-clear">
+          <input type="date" id="dateFilter" />
+          <button class="clear-btn" id="clearDate" title="Clear date filter">×</button>
+        </fieldset>
       </div>
       <div class="filter-group">
         <label for="projectFilter">Project:</label>
-        <select id="projectFilter">
-          <option value="">All Projects</option>
-          ${projects.map(p => `<option value="${p}">${p}</option>`).join('')}
-        </select>
+        <fieldset class="input-with-clear">
+          <select id="projectFilter">
+            <option value="">All Projects</option>
+            ${projects.map(p => `<option value="${p}">${p}</option>`).join('')}
+          </select>
+          <button class="clear-btn" id="clearProject" title="Clear project filter">×</button>
+        </fieldset>
       </div>
       <div class="filter-group">
         <input type="checkbox" id="hideCompleted" />
@@ -528,11 +668,14 @@ export class TaskTableProvider {
             <td class="date-cell">${task.date}</td>
             <td class="project-cell">${task.project}</td>
             <td class="task-cell">
-              <input 
-                type="text" 
-                class="task-input"
-                value="${task.task.replace(/"/g, '&quot;')}"
-              />
+              <div class="task-cell-content">
+                <span class="open-file-icon" title="Open file">↗</span>
+                <input 
+                  type="text" 
+                  class="task-input"
+                  value="${task.task.replace(/"/g, '&quot;')}"
+                />
+              </div>
             </td>
           </tr>
         `).join('')}
@@ -550,6 +693,7 @@ export class TaskTableProvider {
     let currentFilter = '';
     let currentHideCompleted = false;
     let currentSearchText = '';
+    let currentDateFilter = '';
     
     // Event delegation for checkboxes
     document.addEventListener('change', function(e) {
@@ -591,6 +735,25 @@ export class TaskTableProvider {
       }
     });
     
+    // Click on open-file icon
+    document.addEventListener('click', function(e) {
+      if (e.target.classList.contains('open-file-icon')) {
+        const row = e.target.closest('tr');
+        if (!row) return;
+        
+        const filePath = row.getAttribute('data-filepath');
+        const lineNumber = parseInt(row.getAttribute('data-line-number'), 10);
+        
+        if (filePath && !isNaN(lineNumber)) {
+          vscode.postMessage({
+            command: 'openFile',
+            filePath: filePath,
+            lineNumber: lineNumber
+          });
+        }
+      }
+    });
+    
     function rebuildTable(tasks) {
       const tbody = document.querySelector('#tasksTable tbody');
       if (!tbody) return;
@@ -607,11 +770,14 @@ export class TaskTableProvider {
           <td class="date-cell">\${task.date}</td>
           <td class="project-cell">\${task.project}</td>
           <td class="task-cell">
-            <input 
-              type="text" 
-              class="task-input"
-              value="\${task.task.replace(/"/g, '&quot;')}"
-            />
+            <div class="task-cell-content">
+              <span class="open-file-icon" title="Open file">↗</span>
+              <input 
+                type="text" 
+                class="task-input"
+                value="\${task.task.replace(/"/g, '&quot;')}"
+              />
+            </div>
           </td>
         </tr>
       \`).join('');
@@ -650,32 +816,49 @@ export class TaskTableProvider {
       if (searchInput) {
         searchInput.value = currentSearchText;
       }
+      
+      const dateFilter = document.getElementById('dateFilter');
+      if (dateFilter) {
+        dateFilter.value = currentDateFilter;
+      }
     }
     
     function applyFilter() {
       const rows = document.querySelectorAll('#tasksTable tbody tr');
       const searchLower = currentSearchText.toLowerCase();
+      let visibleCount = 0;
       
       rows.forEach(row => {
         const matchesProject = !currentFilter || row.getAttribute('data-project') === currentFilter;
         const isCompleted = row.querySelector('input[type="checkbox"]').checked;
+        
+        // Date filter
+        const date = row.querySelector('.date-cell').textContent;
+        const matchesDate = !currentDateFilter || date === currentDateFilter;
         
         // Search in task text, project, and date
         let matchesSearch = true;
         if (searchLower) {
           const taskText = row.querySelector('.task-input').value.toLowerCase();
           const project = row.getAttribute('data-project').toLowerCase();
-          const date = row.querySelector('.date-cell').textContent.toLowerCase();
+          const dateLower = date.toLowerCase();
           
           matchesSearch = taskText.includes(searchLower) || 
                          project.includes(searchLower) || 
-                         date.includes(searchLower);
+                         dateLower.includes(searchLower);
         }
         
-        const shouldShow = matchesProject && matchesSearch && (!currentHideCompleted || !isCompleted);
+        const shouldShow = matchesProject && matchesDate && matchesSearch && (!currentHideCompleted || !isCompleted);
         
         row.style.display = shouldShow ? '' : 'none';
+        if (shouldShow) visibleCount++;
       });
+      
+      // Update task count
+      const taskCountEl = document.getElementById('taskCount');
+      if (taskCountEl) {
+        taskCountEl.textContent = '(' + visibleCount + ')';
+      }
     }
     
     function applySorting() {
@@ -755,10 +938,88 @@ export class TaskTableProvider {
       applyFilter();
     });
     
+    // Clear search button
+    document.getElementById('clearSearch')?.addEventListener('click', function() {
+      const searchInput = document.getElementById('searchInput');
+      if (searchInput) {
+        searchInput.value = '';
+        currentSearchText = '';
+        applyFilter();
+      }
+    });
+    
+    // Date filter
+    document.getElementById('dateFilter')?.addEventListener('change', function(e) {
+      currentDateFilter = e.target.value;
+      applyFilter();
+    });
+    
+    // Clear date button
+    document.getElementById('clearDate')?.addEventListener('click', function() {
+      const dateInput = document.getElementById('dateFilter');
+      if (dateInput) {
+        dateInput.value = '';
+        currentDateFilter = '';
+        applyFilter();
+      }
+    });
+    
+    // Click on date cells to toggle date filter
+    document.addEventListener('click', function(e) {
+      if (e.target.classList.contains('date-cell')) {
+        const clickedDate = e.target.textContent.trim();
+        
+        // Toggle: if same date is clicked, clear filter; otherwise set new filter
+        if (currentDateFilter === clickedDate) {
+          currentDateFilter = '';
+        } else {
+          currentDateFilter = clickedDate;
+        }
+        
+        // Update the date input field
+        const dateInput = document.getElementById('dateFilter');
+        if (dateInput) {
+          dateInput.value = currentDateFilter;
+        }
+        
+        applyFilter();
+      }
+      
+      // Click on project cells to toggle project filter
+      if (e.target.classList.contains('project-cell')) {
+        const clickedProject = e.target.textContent.trim();
+        
+        // Toggle: if same project is clicked, clear filter; otherwise set new filter
+        if (currentFilter === clickedProject) {
+          currentFilter = '';
+        } else {
+          currentFilter = clickedProject;
+        }
+        
+        // Update the project select dropdown
+        const projectSelect = document.getElementById('projectFilter');
+        if (projectSelect) {
+          projectSelect.value = currentFilter;
+        }
+        
+        applyFilter();
+      }
+    });
+    
     // Project filter
     document.getElementById('projectFilter')?.addEventListener('change', function(e) {
       currentFilter = e.target.value;
       applyFilter();
+    });
+    
+    // Clear project button
+    document.getElementById('clearProject')?.addEventListener('click', function() {
+      const projectSelect = document.getElementById('projectFilter');
+      if (projectSelect) {
+        projectSelect.value = '';
+        currentFilter = '';
+        applyFilter();
+      }
     });
     
     // Hide completed toggle
@@ -797,6 +1058,9 @@ export class TaskTableProvider {
       dateHeader.classList.add('sorted-desc');
       applySorting();
     }
+    
+    // Initialize task count
+    applyFilter();
   </script>
 </body>
 </html>`;
