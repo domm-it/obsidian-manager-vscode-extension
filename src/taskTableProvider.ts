@@ -409,7 +409,7 @@ export class TaskTableProvider {
     
     .status-cell {
       text-align: center;
-      width: 60px;
+      width: 40px;
     }
     
     .date-cell {
@@ -508,7 +508,7 @@ export class TaskTableProvider {
     <table id="tasksTable">
       <thead>
         <tr>
-          <th class="status-cell sortable" data-column="status">STATUS</th>
+          <th class="status-cell sortable" data-column="status"></th>
           <th class="date-cell sortable" data-column="date">DATE</th>
           <th class="project-cell sortable" data-column="project">PROJECT</th>
           <th class="task-cell">TASK</th>
