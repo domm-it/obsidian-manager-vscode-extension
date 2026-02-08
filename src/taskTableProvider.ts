@@ -415,6 +415,13 @@ export class TaskTableProvider {
         .replace(/>/g, '&gt;');
     };
     
+    // Helper function to extract hashtags from text
+    const extractTags = (text: string): string[] => {
+      const hashtagRegex = /#[\w]+/g;
+      const matches = text.match(hashtagRegex);
+      return matches || [];
+    };
+    
     // Generate a nonce for CSP
     const nonce = this.getNonce();
     
@@ -719,6 +726,33 @@ export class TaskTableProvider {
       gap: 8px;
     }
     
+    .tags-cell {
+      width: 150px;
+      min-width: 150px;
+      max-width: 150px;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+    
+    .tags-cell::-webkit-scrollbar {
+      height: 4px;
+    }
+    
+    .tag {
+      display: inline-block;
+      background-color: var(--vscode-badge-background);
+      color: var(--vscode-badge-foreground);
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 11px;
+      margin-right: 4px;
+      cursor: pointer;
+    }
+    
+    .tag:hover {
+      opacity: 0.8;
+    }
+    
     .open-file-icon {
       cursor: pointer;
       color: var(--vscode-textLink-foreground);
@@ -821,7 +855,7 @@ export class TaskTableProvider {
       <div class="filter-group">
         <label for="searchInput">Search:</label>
         <fieldset class="input-with-clear">
-          <input type="text" id="searchInput" placeholder="Filter by task, project or date..." />
+          <input type="text" id="searchInput" placeholder="Filter by task, project, date or #hashtag..." />
           <button class="clear-btn" id="clearSearch" title="Clear search">×</button>
         </fieldset>
       </div>
@@ -862,6 +896,7 @@ export class TaskTableProvider {
           <th class="date-cell sortable" data-column="date">DATE</th>
           <th class="project-cell sortable" data-column="project">PROJECT</th>
           <th class="task-cell">TASK</th>
+          <th class="tags-cell">TAGS</th>
           <th class="insert-cell"></th>
           <th class="actions-cell"></th>
         </tr>
@@ -889,6 +924,7 @@ export class TaskTableProvider {
                 />
               </div>
             </td>
+            <td class="tags-cell">${extractTags(task.task).map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}</td>
             <td class="insert-cell">
               <span class="codicon codicon-add add-icon" title="Add task after"></span>
             </td>
@@ -903,6 +939,13 @@ export class TaskTableProvider {
   
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
+    
+    // Function to extract hashtags from text
+    function extractTags(text) {
+      const hashtagRegex = /#[\w]+/g;
+      const matches = text.match(hashtagRegex);
+      return matches || [];
+    }
     
     // Preserve state - default sort by date descending
     let currentSort = { column: 'date', direction: 'desc' };
@@ -1020,6 +1063,20 @@ export class TaskTableProvider {
           });
         }
       }
+      
+      // Click on tag to filter
+      if (e.target.classList.contains('tag')) {
+        const tagText = e.target.textContent;
+        if (tagText) {
+          // Set search input to hashtag
+          const searchInput = document.getElementById('searchInput');
+          if (searchInput) {
+            searchInput.value = tagText;
+            currentSearchText = tagText;
+            applyFilter();
+          }
+        }
+      }
     });
     
     function rebuildTable(tasks) {
@@ -1047,6 +1104,7 @@ export class TaskTableProvider {
               />
             </div>
           </td>
+          <td class="tags-cell">\${extractTags(task.task).map(tag => '<span class="tag">' + tag + '</span>').join('')}</td>
           <td class="insert-cell">
             <span class="codicon codicon-add add-icon" title="Add task after"></span>
           </td>
@@ -1107,12 +1165,20 @@ export class TaskTableProvider {
         let matchesSearch = true;
         if (searchLower) {
           const taskText = row.querySelector('.task-input').value.toLowerCase();
-          const project = row.getAttribute('data-project').toLowerCase();
-          const dateLower = date.toLowerCase();
           
-          matchesSearch = taskText.includes(searchLower) || 
-                         project.includes(searchLower) || 
-                         dateLower.includes(searchLower);
+          // Check if searching for hashtag
+          if (searchLower.startsWith('#')) {
+            // Hashtag search: only search in task text for exact hashtag match
+            matchesSearch = taskText.includes(searchLower);
+          } else {
+            // Normal search: search in task text, project, and date
+            const project = row.getAttribute('data-project').toLowerCase();
+            const dateLower = date.toLowerCase();
+            
+            matchesSearch = taskText.includes(searchLower) || 
+                           project.includes(searchLower) || 
+                           dateLower.includes(searchLower);
+          }
         }
         
         const shouldShow = matchesProject && matchesDate && matchesSearch && (!currentHideCompleted || !isCompleted);
