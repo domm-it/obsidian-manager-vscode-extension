@@ -91,6 +91,12 @@ export class TaskTableProvider {
                 await this.editTaskTags(message.taskId);
               }
               break;
+            
+            case 'removeTag':
+              if (message.taskId && message.tag) {
+                await this.removeTagFromTask(message.taskId, message.tag);
+              }
+              break;
           }
         },
         undefined,
@@ -511,6 +517,39 @@ export class TaskTableProvider {
     const matches = text.match(hashtagRegex);
     return matches || [];
   }
+  
+  private async removeTagFromTask(taskId: string, tagToRemove: string) {
+    const task = this.tasks.find(t => t.id === taskId);
+    if (!task) {
+      return;
+    }
+
+    try {
+      // Remove the specific tag from task text
+      let newTaskText = task.task;
+      newTaskText = newTaskText.replace(new RegExp(tagToRemove.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*', 'g'), '').trim();
+      
+      // Update the task in file
+      const content = await fs.readFile(task.filePath, 'utf-8');
+      const lines = content.split('\n');
+      const line = lines[task.lineNumber];
+      const checkbox = task.status ? '- [x]' : '- [ ]';
+      const indent = line.match(/^(\s*)/)?.[1] || '';
+      
+      lines[task.lineNumber] = `${indent}${checkbox} ${newTaskText}`;
+      await fs.writeFile(task.filePath, lines.join('\n'), 'utf-8');
+      
+      // Reload tasks and update view
+      await this.loadTasks();
+      this.sendTasksUpdate();
+      
+      // Refresh hashtags tree
+      vscode.commands.executeCommand('obsidianManager.refreshHashtags');
+      
+    } catch (error) {
+      vscode.window.showErrorMessage(`Error removing tag: ${error}`);
+    }
+  }
 
   private updateWebview() {
     if (!this.panel) {
@@ -899,7 +938,9 @@ export class TaskTableProvider {
     }
     
     .tag {
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
       background-color: var(--vscode-badge-background);
       color: var(--vscode-badge-foreground);
       padding: 2px 6px;
@@ -907,10 +948,28 @@ export class TaskTableProvider {
       font-size: 11px;
       margin-right: 4px;
       cursor: pointer;
+      position: relative;
     }
     
     .tag:hover {
       opacity: 0.8;
+    }
+    
+    .tag-remove {
+      display: none;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: bold;
+      opacity: 0.7;
+      margin-left: 2px;
+    }
+    
+    .tag:hover .tag-remove {
+      display: inline;
+    }
+    
+    .tag-remove:hover {
+      opacity: 1;
     }
     
     .open-file-icon {
@@ -1084,7 +1143,7 @@ export class TaskTableProvider {
                 />
               </div>
             </td>
-            <td class="tags-cell">${extractTags(task.task).map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join('')}</td>
+            <td class="tags-cell">${extractTags(task.task).map(tag => `<span class="tag" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}<span class="tag-remove">×</span></span>`).join('')}</td>
             <td class="insert-cell">
               <span class="codicon codicon-add add-icon" title="Add task after"></span>
             </td>
@@ -1232,15 +1291,44 @@ export class TaskTableProvider {
         }
       }
       
-      // Click on tag to filter
+      // Click on tag remove button
+      if (e.target.classList.contains('tag-remove')) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const tagSpan = e.target.closest('.tag');
+        if (!tagSpan) return;
+        
+        const row = tagSpan.closest('tr');
+        if (!row) return;
+        
+        const taskId = row.getAttribute('data-task-id');
+        const tag = tagSpan.getAttribute('data-tag');
+        
+        if (taskId && tag) {
+          vscode.postMessage({
+            command: 'removeTag',
+            taskId: taskId,
+            tag: tag
+          });
+        }
+        return;
+      }
+      
+      // Click on tag to filter (toggle behavior)
       if (e.target.classList.contains('tag')) {
-        const tagText = e.target.textContent;
+        const tagText = e.target.getAttribute('data-tag');
         if (tagText) {
-          // Set search input to hashtag
           const searchInput = document.getElementById('searchInput');
           if (searchInput) {
-            searchInput.value = tagText;
-            currentSearchText = tagText;
+            // Toggle: if tag is already in search, remove it; otherwise set it
+            if (currentSearchText === tagText) {
+              searchInput.value = '';
+              currentSearchText = '';
+            } else {
+              searchInput.value = tagText;
+              currentSearchText = tagText;
+            }
             applyFilter();
           }
         }
@@ -1268,7 +1356,7 @@ export class TaskTableProvider {
       
       tbody.innerHTML = tasks.map((task, index) => {
         const tags = extractTags(task.task);
-        const tagsHtml = tags.map(tag => '<span class="tag">' + escapeHtml(tag) + '</span>').join('');
+        const tagsHtml = tags.map(tag => '<span class="tag" data-tag="' + escapeHtml(tag) + '">' + escapeHtml(tag) + '<span class="tag-remove">×</span></span>').join('');
         
         return \`
         <tr data-task-id="\${task.id}" data-project="\${task.project}" data-filepath="\${task.filePath}" data-line-number="\${task.lineNumber}">
