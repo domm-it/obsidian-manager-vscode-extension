@@ -62,7 +62,14 @@ export class ObsidianTreeProvider implements vscode.TreeDataProvider<ObsidianNod
     const showFileTreeIcons = cfg.get<boolean>('showFileTreeIcons', true);
     
     if (element.isDirectory) {
-      treeItem.contextValue = 'obsidianFolder';
+      // Check if this is a root folder (direct child of vault root)
+      const parentPath = path.dirname(element.resourceUri.fsPath);
+      const configuredVault = ((cfg.get<string>('vault') || '')).trim();
+      const root = this.normalizeToFsPath(configuredVault);
+      const isRootFolder = root && parentPath === root;
+      
+      treeItem.contextValue = isRootFolder ? 'obsidianRootFolder' : 'obsidianFolder';
+      
       if (showFolderTreeIcons) {
         // Use VS Code's ThemeIcon for folders so the icon follows theme colors and
         // file-icon settings. `symbol-folder` is a suitable symbol for a folder container.

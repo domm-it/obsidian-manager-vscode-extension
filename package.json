@@ -268,6 +268,12 @@
         "title": "Show Tasks Table",
         "category": "Obsidian manager",
         "icon": "$(table)"
+      },
+      {
+        "command": "obsidianManager.showTaskTableForProject",
+        "title": "Show Tasks for Project",
+        "category": "Obsidian manager",
+        "icon": "$(table)"
       }
     ],
     "menus": {
@@ -289,6 +295,26 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "obsidianManager.showTaskTableForProject",
+          "when": "view == obsidianFiles && viewItem == obsidianRootFolder",
+          "group": "inline"
+        },
+        {
+          "command": "obsidianManager.createFileInFolder",
+          "when": "view == obsidianFiles && viewItem == obsidianRootFolder",
+          "group": "inline"
+        },
+        {
+          "command": "obsidianManager.createFolder",
+          "when": "view == obsidianFiles && viewItem == obsidianRootFolder",
+          "group": "inline"
+        },
+        {
+          "command": "obsidianManager.deleteItem",
+          "when": "view == obsidianFiles && viewItem == obsidianRootFolder",
+          "group": "inline"
+        },
         {
           "command": "obsidianManager.createFileInFolder",
           "when": "view == obsidianFiles && viewItem == obsidianFolder",
@@ -321,7 +347,7 @@
         },
         {
           "command": "obsidianManager.deleteItem",
-          "when": "view == obsidianFiles && viewItem == obsidianFolder",
+          "when": "view == obsidianFiles && (viewItem == obsidianFolder || viewItem == obsidianRootFolder)",
           "group": "inline"
         },
         {
@@ -346,22 +372,22 @@
         },
         {
           "command": "obsidianManager.createFileInFolder.context",
-          "when": "view == obsidianFiles && viewItem == obsidianFolder",
+          "when": "view == obsidianFiles && (viewItem == obsidianFolder || viewItem == obsidianRootFolder)",
           "group": "1_create"
         },
         {
           "command": "obsidianManager.createFolder.context",
-          "when": "view == obsidianFiles && viewItem == obsidianFolder",
+          "when": "view == obsidianFiles && (viewItem == obsidianFolder || viewItem == obsidianRootFolder)",
           "group": "1_create"
         },
         {
           "command": "obsidianManager.revealInFinder",
-          "when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
+          "when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder || viewItem == obsidianRootFolder)",
           "group": "2_calendar"
         },
         {
           "command": "obsidianManager.renameItem.context",
-          "when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
+          "when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder || viewItem == obsidianRootFolder)",
           "group": "3_modify@1"
         },
         {
@@ -371,7 +397,7 @@
         },
         {
           "command": "obsidianManager.deleteItem.context",
-          "when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder)",
+          "when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder || viewItem == obsidianRootFolder)",
           "group": "3_modify@3"
         }
       ],

@@ -2503,10 +2503,28 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Task Table Provider
   const taskTableProvider = new TaskTableProvider(context);
-  const showTaskTableCmd = vscode.commands.registerCommand('obsidianManager.showTaskTable', async (filterDate?: string) => {
-    await taskTableProvider.show(filterDate);
+  const showTaskTableCmd = vscode.commands.registerCommand('obsidianManager.showTaskTable', async (filterDate?: string, filterProject?: string) => {
+    await taskTableProvider.show(filterDate, filterProject);
   });
   context.subscriptions.push(showTaskTableCmd);
+
+  // Show Task Table filtered by project from root folder
+  const showTaskTableForProjectCmd = vscode.commands.registerCommand('obsidianManager.showTaskTableForProject', async (...args: any[]) => {
+    // Extract folder from args (TreeItem or Uri)
+    let folderUri: vscode.Uri | undefined;
+    const first = args && args[0];
+    if (first instanceof vscode.Uri) {
+      folderUri = first;
+    } else if (first?.resourceUri instanceof vscode.Uri) {
+      folderUri = first.resourceUri;
+    }
+    
+    if (folderUri) {
+      const folderName = path.basename(folderUri.fsPath);
+      await taskTableProvider.show(undefined, folderName);
+    }
+  });
+  context.subscriptions.push(showTaskTableForProjectCmd);
 }
 
 export function deactivate() {}

@@ -20,7 +20,7 @@ export class TaskTableProvider {
 
   constructor(private context: vscode.ExtensionContext) {}
 
-  public async show(filterDate?: string) {
+  public async show(filterDate?: string, filterProject?: string) {
     // Get vault path from configuration
     const cfg = vscode.workspace.getConfiguration('obsidianManager');
     this.vaultPath = (cfg.get<string>('vault') || '').trim();
@@ -102,9 +102,9 @@ export class TaskTableProvider {
     await this.loadTasks();
     this.updateWebview();
     
-    // Apply initial filter if provided
-    if (filterDate) {
-      this.sendTasksUpdate(undefined, filterDate);
+    // Apply initial filters if provided
+    if (filterDate || filterProject) {
+      this.sendTasksUpdate(undefined, filterDate, filterProject);
     }
   }
 
@@ -334,7 +334,7 @@ export class TaskTableProvider {
     this.panel.webview.html = this.getWebviewContent();
   }
 
-  private sendTasksUpdate(focusTaskId?: string, filterDate?: string) {
+  private sendTasksUpdate(focusTaskId?: string, filterDate?: string, filterProject?: string) {
     if (!this.panel) {
       return;
     }
@@ -345,7 +345,8 @@ export class TaskTableProvider {
       tasks: this.tasks,
       projects: [...new Set(this.tasks.map(t => t.project))].sort(),
       focusTaskId: focusTaskId,
-      filterDate: filterDate
+      filterDate: filterDate,
+      filterProject: filterProject
     });
   }
 
@@ -1192,6 +1193,16 @@ export class TaskTableProvider {
           const dateInput = document.getElementById('dateFilter');
           if (dateInput) {
             dateInput.value = message.filterDate;
+          }
+          applyFilter();
+        }
+        
+        // Apply project filter if provided
+        if (message.filterProject) {
+          currentFilter = message.filterProject;
+          const projectSelect = document.getElementById('projectFilter');
+          if (projectSelect) {
+            projectSelect.value = message.filterProject;
           }
           applyFilter();
         }
