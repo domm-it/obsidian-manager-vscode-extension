@@ -13,14 +13,20 @@ export class HashtagTreeProvider implements vscode.TreeDataProvider<HashtagNode>
 
   private hashtags: Map<string, number> = new Map();
   private vaultPath: string | undefined;
+  private isRefreshing: boolean = false;
 
   constructor(private context: vscode.ExtensionContext) {
     // Initial scan
-    this.refreshHashtags().catch(() => {});
+    this.refreshHashtags().catch((err) => {
+      console.error('Error during initial hashtag scan:', err);
+    });
   }
 
   refresh(): void {
-    this.refreshHashtags().catch(() => {});
+    this.refreshHashtags().catch((err) => {
+      console.error('Error refreshing hashtags:', err);
+      vscode.window.showErrorMessage(`Error refreshing hashtags: ${err}`);
+    });
   }
 
   getTreeItem(element: HashtagNode): vscode.TreeItem {
@@ -61,26 +67,37 @@ export class HashtagTreeProvider implements vscode.TreeDataProvider<HashtagNode>
   }
 
   private async refreshHashtags(): Promise<void> {
-    const cfg = vscode.workspace.getConfiguration('obsidianManager');
-    const configuredVault = ((cfg.get<string>('vault') || '')).trim();
+    // Prevent concurrent refreshes
+    if (this.isRefreshing) {
+      return;
+    }
     
-    if (!configuredVault) {
-      this.hashtags.clear();
-      this._onDidChangeTreeData.fire();
-      return;
-    }
+    this.isRefreshing = true;
+    
+    try {
+      const cfg = vscode.workspace.getConfiguration('obsidianManager');
+      const configuredVault = ((cfg.get<string>('vault') || '')).trim();
+      
+      if (!configuredVault) {
+        this.hashtags.clear();
+        this._onDidChangeTreeData.fire();
+        return;
+      }
 
-    this.vaultPath = this.normalizeToFsPath(configuredVault);
-    if (!this.vaultPath) {
-      this.hashtags.clear();
-      this._onDidChangeTreeData.fire();
-      return;
-    }
+      this.vaultPath = this.normalizeToFsPath(configuredVault);
+      if (!this.vaultPath) {
+        this.hashtags.clear();
+        this._onDidChangeTreeData.fire();
+        return;
+      }
 
-    // Clear and rescan
-    this.hashtags.clear();
-    await this.scanForHashtags(this.vaultPath);
-    this._onDidChangeTreeData.fire();
+      // Clear and rescan
+      this.hashtags.clear();
+      await this.scanForHashtags(this.vaultPath);
+      this._onDidChangeTreeData.fire();
+    } finally {
+      this.isRefreshing = false;
+    }
   }
 
   private async scanForHashtags(dir: string): Promise<void> {
@@ -95,15 +112,15 @@ export class HashtagTreeProvider implements vscode.TreeDataProvider<HashtagNode>
         if (entry.isDirectory()) {
           await this.scanForHashtags(fullPath);
         } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) {
-          // Only process files with date prefix (YYYY-MM-DD-)
-          const datePattern = /^\d{4}-\d{2}-\d{2}-/;
+          // Only process files with date prefix (YYYY-MM-DD)
+          const datePattern = /^\d{4}-\d{2}-\d{2}/;
           if (datePattern.test(entry.name)) {
             await this.extractHashtagsFromFile(fullPath);
           }
         }
       }
     } catch (err) {
-      // Ignore errors
+      console.error('HashtagTreeProvider: Error scanning directory:', dir, err);
     }
   }
 
@@ -111,11 +128,13 @@ export class HashtagTreeProvider implements vscode.TreeDataProvider<HashtagNode>
     try {
       const content = await fs.readFile(filePath, 'utf-8');
       const lines = content.split('\n');
-      const hashtagRegex = /#[\w]+/g;
+      const hashtagRegex = /#[a-zA-Z0-9_]+/g;
       
       for (const line of lines) {
         // Only extract hashtags from task lines (- [ ] or - [x])
-        if (line.includes('- [ ]') || line.includes('- [x]')) {
+        const isTask = line.includes('- [ ]') || line.includes('- [x]');
+        
+        if (isTask) {
           const matches = line.match(hashtagRegex);
           if (matches) {
             for (const hashtag of matches) {
@@ -126,7 +145,7 @@ export class HashtagTreeProvider implements vscode.TreeDataProvider<HashtagNode>
         }
       }
     } catch (err) {
-      // Ignore file read errors
+      console.error('HashtagTreeProvider: Error reading file:', filePath, err);
     }
   }
 

@@ -538,6 +538,11 @@
           "default": "edit",
           "description": "How files should be opened from the Task Table: 'edit' mode for immediate editing or 'preview' mode for read-only viewing."
         },
+        "obsidianManager.taskTableHideCompletedByDefault": {
+          "type": "boolean",
+          "default": true,
+          "description": "Hide completed tasks by default when opening the Task Table."
+        },
         "obsidianManager.newFileOpenMode": {
           "type": "string",
           "enum": [

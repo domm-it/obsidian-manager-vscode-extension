@@ -261,6 +261,10 @@ export class TaskTableProvider {
       await this.loadTasks();
       this.sendTasksUpdate();
       
+      // Refresh hashtags tree (task text might contain hashtags)
+      console.log('TaskTableProvider: Calling refreshHashtags after updateTaskText');
+      vscode.commands.executeCommand('obsidianManager.refreshHashtags');
+      
     } catch (error) {
       vscode.window.showErrorMessage(`Error updating task text: ${error}`);
     }
@@ -345,6 +349,10 @@ export class TaskTableProvider {
       // Reload tasks and send updated data without full refresh
       await this.loadTasks();
       this.sendTasksUpdate();
+      
+      // Refresh hashtags tree (deleted task might have had hashtags)
+      console.log('TaskTableProvider: Calling refreshHashtags after deleteTask');
+      vscode.commands.executeCommand('obsidianManager.refreshHashtags');
       
     } catch (error) {
       vscode.window.showErrorMessage(`Error deleting task: ${error}`);
@@ -505,6 +513,7 @@ export class TaskTableProvider {
       this.sendTasksUpdate();
       
       // Refresh hashtags tree
+      console.log('TaskTableProvider: Calling refreshHashtags after editTaskTags');
       vscode.commands.executeCommand('obsidianManager.refreshHashtags');
       
     } catch (error) {
@@ -544,6 +553,7 @@ export class TaskTableProvider {
       this.sendTasksUpdate();
       
       // Refresh hashtags tree
+      console.log('TaskTableProvider: Calling refreshHashtags after removeTagFromTask');
       vscode.commands.executeCommand('obsidianManager.refreshHashtags');
       
     } catch (error) {
@@ -576,6 +586,11 @@ export class TaskTableProvider {
     });
   }
 
+  private getHideCompletedDefault(): boolean {
+    const cfg = vscode.workspace.getConfiguration('obsidianManager');
+    return cfg.get<boolean>('taskTableHideCompletedByDefault', true);
+  }
+
   private getNonce() {
     let text = '';
     const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -590,6 +605,9 @@ export class TaskTableProvider {
     
     // Get unique projects for filter dropdown
     const projects = [...new Set(tasks.map(t => t.project))].sort();
+    
+    // Get hideCompleted default from settings
+    const hideCompletedDefault = this.getHideCompletedDefault();
     
     // Helper function to escape HTML attributes
     const escapeHtml = (str: string) => {
@@ -1096,7 +1114,7 @@ export class TaskTableProvider {
         </fieldset>
       </div>
       <div class="filter-group toggle-container">
-        <input type="checkbox" id="hideCompleted" checked />
+        <input type="checkbox" id="hideCompleted" ${hideCompletedDefault ? 'checked' : ''} />
         <label for="hideCompleted" class="toggle-switch"></label>
         <label for="hideCompleted" style="cursor: pointer;">Hide completed</label>
       </div>
@@ -1105,7 +1123,7 @@ export class TaskTableProvider {
   
   ${tasks.length === 0 ? `
     <div class="empty-message">
-      No tasks found in date-prefixed markdown files (YYYY-MM-DD-*.md)
+      No tasks found in date-prefixed markdown files (YYYY-MM-DD*.md)
     </div>
   ` : `
     <table id="tasksTable">
@@ -1177,7 +1195,7 @@ export class TaskTableProvider {
     // Preserve state - default sort by date descending
     let currentSort = { column: 'date', direction: 'desc' };
     let currentFilter = '';
-    let currentHideCompleted = true;
+    let currentHideCompleted = ${hideCompletedDefault};
     let currentSearchText = '';
     let currentDateFilter = '';
     
@@ -1390,24 +1408,7 @@ export class TaskTableProvider {
         \`;
       }).join('');
       
-      // Reapply sort FIRST
-      if (currentSort.column) {
-        // Update UI to show current sort
-        document.querySelectorAll('th.sortable').forEach(h => {
-          h.classList.remove('sorted-asc', 'sorted-desc');
-        });
-        const header = document.querySelector('th[data-column="' + currentSort.column + '"]');
-        if (header) {
-          header.classList.add('sorted-' + currentSort.direction);
-        }
-        applySorting();
-      }
-      
-      // Then apply filter (after sorting)
-      applyFilter();
-      
-      // DON'T restore filter states here - will be done after updateProjectFilter
-      
+      // Restore filter input states FIRST
       const hideCompletedCheckbox = document.getElementById('hideCompleted');
       if (hideCompletedCheckbox) {
         hideCompletedCheckbox.checked = currentHideCompleted;
@@ -1422,6 +1423,22 @@ export class TaskTableProvider {
       if (dateFilter) {
         dateFilter.value = currentDateFilter;
       }
+      
+      // Then apply sort
+      if (currentSort.column) {
+        // Update UI to show current sort
+        document.querySelectorAll('th.sortable').forEach(h => {
+          h.classList.remove('sorted-asc', 'sorted-desc');
+        });
+        const header = document.querySelector('th[data-column="' + currentSort.column + '"]');
+        if (header) {
+          header.classList.add('sorted-' + currentSort.direction);
+        }
+        applySorting();
+      }
+      
+      // Finally apply filter (after restoring states and sorting)
+      applyFilter();
     }
     
     function applyFilter() {
@@ -1546,6 +1563,8 @@ export class TaskTableProvider {
         rebuildTable(message.tasks);
         updateProjectFilter(message.projects);
         
+        let filterApplied = false;
+        
         // Apply date filter if provided
         if (message.filterDate) {
           currentDateFilter = message.filterDate;
@@ -1553,7 +1572,7 @@ export class TaskTableProvider {
           if (dateInput) {
             dateInput.value = message.filterDate;
           }
-          applyFilter();
+          filterApplied = true;
         }
         
         // Apply project filter if provided
@@ -1563,7 +1582,7 @@ export class TaskTableProvider {
           if (projectSelect) {
             projectSelect.value = message.filterProject;
           }
-          applyFilter();
+          filterApplied = true;
         }
         
         // Apply hashtag filter if provided
@@ -1573,6 +1592,11 @@ export class TaskTableProvider {
           if (searchInput) {
             searchInput.value = message.filterHashtag;
           }
+          filterApplied = true;
+        }
+        
+        // Always apply filter at the end to ensure table is properly filtered
+        if (filterApplied) {
           applyFilter();
         }
         
