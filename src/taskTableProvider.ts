@@ -133,6 +133,12 @@ export class TaskTableProvider {
                 await this.bulkMoveTasks(message.taskIds);
               }
               break;
+            
+            case 'reloadTasks':
+              // Reload tasks and send updated data without full refresh
+              await this.loadTasks();
+              this.sendTasksUpdate();
+              break;
           }
         },
         undefined,
@@ -1614,6 +1620,18 @@ export class TaskTableProvider {
       opacity: 1;
     }
     
+    .reload-icon {
+      cursor: pointer;
+      color: var(--vscode-foreground);
+      opacity: 0.7;
+      font-size: 14px !important;
+    }
+    
+    .reload-icon:hover {
+      opacity: 1;
+      color: var(--vscode-textLink-activeForeground);
+    }
+    
     input[type="checkbox"] {
       cursor: pointer;
       width: 18px;
@@ -1750,7 +1768,9 @@ export class TaskTableProvider {
           <th class="task-cell">TASK</th>
           <th class="tags-cell">TAGS</th>
           <th class="insert-cell"></th>
-          <th class="actions-cell"></th>
+          <th class="actions-cell">
+            <span class="codicon codicon-refresh reload-icon" title="Reload tasks"></span>
+          </th>
         </tr>
       </thead>
       <tbody>
@@ -2087,6 +2107,13 @@ export class TaskTableProvider {
         }
       }
       
+      // Click on reload icon in header
+      if (e.target.classList.contains('reload-icon')) {
+        vscode.postMessage({
+          command: 'reloadTasks'
+        });
+      }
+      
       // Click on tag remove button
       if (e.target.classList.contains('tag-remove')) {
         e.preventDefault();
@@ -2253,7 +2280,7 @@ export class TaskTableProvider {
         applySorting();
       }
       
-      // Finally apply filter (after restoring states and sorting)
+      // Apply filter after restoring states and sorting
       applyFilter();
     }
     
@@ -2372,10 +2399,7 @@ export class TaskTableProvider {
         });
         idsToRemove.forEach(id => selectedTaskIds.delete(id));
         
-        rebuildTable(message.tasks);
-        
-        let filterApplied = false;
-        
+        // Apply filters BEFORE rebuilding table
         // Apply date filter if provided
         if (message.filterDate) {
           currentDateFilter = message.filterDate;
@@ -2383,7 +2407,6 @@ export class TaskTableProvider {
           if (dateInput) {
             dateInput.value = message.filterDate;
           }
-          filterApplied = true;
         }
         
         // Apply project filter if provided
@@ -2394,7 +2417,6 @@ export class TaskTableProvider {
             projectFilterDisplay.value = message.filterProject;
             projectFilterDisplay.placeholder = '';
           }
-          filterApplied = true;
         }
         
         // Apply hashtag filter if provided
@@ -2404,7 +2426,6 @@ export class TaskTableProvider {
           if (searchInput) {
             searchInput.value = message.filterHashtag;
           }
-          filterApplied = true;
         }
         
         // Apply file filter if provided
@@ -2415,13 +2436,10 @@ export class TaskTableProvider {
             fileFilterDisplay.value = message.filterFile;
             fileFilterDisplay.placeholder = '';
           }
-          filterApplied = true;
         }
         
-        // Always apply filter at the end to ensure table is properly filtered
-        if (filterApplied) {
-          applyFilter();
-        }
+        // Now rebuild table - this will call applyFilter() at the end with correct filter state
+        rebuildTable(message.tasks);
         
         // Focus on new task input if specified
         if (message.focusTaskId) {

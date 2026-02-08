@@ -296,11 +296,6 @@
     "menus": {
       "editor/title": [
         {
-          "command": "obsidianManager.openFile.icon",
-          "when": "resourceExtname == .md || editorLangId == markdown",
-          "group": "navigation"
-        },
-        {
           "command": "obsidianManager.linkDocument",
           "when": "resourceExtname == .md || editorLangId == markdown",
           "group": "navigation"
@@ -462,21 +457,11 @@
           "group": "navigation@2"
         },
         {
-          "command": "obsidianManager.toggleViewMode",
-          "when": "view == obsidianFiles && !obsidianManager.viewModeIsList",
-          "group": "navigation@2"
-        },
-        {
           "command": "obsidianManager.toggleExpandAll",
           "title": "Toggle expand/collapse all",
           "when": "view == obsidianFiles",
           "group": "navigation@2",
           "icon": "$(collapse-all)"
-        },
-        {
-          "command": "obsidianManager.toggleViewMode",
-          "when": "view == obsidianFiles && obsidianManager.viewModeIsList",
-          "group": "navigation@2"
         },
         {
           "command": "obsidianManager.openSettings",
