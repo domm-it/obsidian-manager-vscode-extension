@@ -10,6 +10,7 @@ export function createCheckboxServer() {
     app.disable('view cache');
     
     app.get('/checkbox/mark', handleCheckboxMark(serverNonce));
+    app.get('/hashtag/open', handleHashtagOpen(serverNonce));
     
     const server = app.listen();
     const port = (server.address() as AddressInfo).port;
@@ -33,6 +34,22 @@ const handleCheckboxMark = (serverNonce: string) => async (req: Request, res: Re
     const checked = req.query.checked === 'true';
 
     await markCheckbox(source, line, checked);
+
+    res.contentType('image/png');
+    res.send(Buffer.from(emptyImage, 'base64'));
+};
+
+const handleHashtagOpen = (serverNonce: string) => async (req: Request, res: Response) => {
+    if (!validateNonce(req.query.nonce as string, serverNonce)) {
+        res.status(403).send('Forbidden');
+        return;
+    }
+
+    const hashtag = req.query.tag as string;
+    
+    if (hashtag) {
+        await vscode.commands.executeCommand('obsidianManager.showTaskTable', undefined, undefined, hashtag);
+    }
 
     res.contentType('image/png');
     res.send(Buffer.from(emptyImage, 'base64'));

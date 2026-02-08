@@ -210,6 +210,15 @@
                         hashtagSpan.className = 'hashtag';
                         hashtagSpan.textContent = match;
                         hashtagSpan.setAttribute('data-hashtag', tag);
+                        hashtagSpan.style.cursor = 'pointer';
+                        
+                        // Add click handler for opening tasks
+                        hashtagSpan.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            openHashtagTasks(match);
+                        });
+                        
                         fragment.appendChild(hashtagSpan);
                         
                         lastIndex = offset + match.length;
@@ -231,6 +240,30 @@
                     }
                 }
             });
+        } catch (e) {
+            // Silent fail
+        }
+    }
+    
+    function openHashtagTasks(hashtag) {
+        try {
+            // Get server data
+            const serverDataDiv = document.getElementById('mdCheckboxServerData');
+            if (!serverDataDiv) {
+                return;
+            }
+            
+            const port = serverDataDiv.getAttribute('data-port');
+            const nonce = serverDataDiv.getAttribute('data-nonce');
+            
+            if (!port || !nonce) {
+                return;
+            }
+            
+            const url = `http://localhost:${port}/hashtag/open?tag=${encodeURIComponent(hashtag)}&nonce=${encodeURIComponent(nonce)}`;
+            
+            const img = new Image();
+            img.src = url;
         } catch (e) {
             // Silent fail
         }
