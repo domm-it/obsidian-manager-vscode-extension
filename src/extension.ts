@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { ObsidianTreeProvider } from './obsidianTree';
+import { ObsidianTreeProvider, ObsidianNode } from './obsidianTree';
 import { TaskTableProvider } from './taskTableProvider';
 import { HashtagTreeProvider } from './hashtagTree';
 import { createCheckboxServer } from './checkboxServer';
@@ -849,7 +849,77 @@ export async function activate(context: vscode.ExtensionContext) {
   const hashtagTreeView = vscode.window.createTreeView('obsidianHashtags', { treeDataProvider: hashtagProvider });
   context.subscriptions.push(hashtagTreeView);
 
+  // Auto-reveal active file in tree view
+  const revealFileInTree = async (documentUri: vscode.Uri | undefined) => {
+    if (!documentUri) {
+      return;
+    }
 
+    const documentPath = path.normalize(documentUri.fsPath);
+    const cfg = vscode.workspace.getConfiguration('obsidianManager');
+    const vaultPath = (cfg.get<string>('vault') || '').trim();
+    
+    // Only reveal markdown files
+    if (!documentPath.toLowerCase().endsWith('.md')) {
+      return;
+    }
+
+    // Normalize vault path for comparison
+    const normalizedVault = vaultPath.startsWith('~') 
+      ? path.join(process.env.HOME || '', vaultPath.slice(1))
+      : vaultPath;
+    const normalizedVaultPath = path.normalize(normalizedVault);
+
+    // Only reveal if the file is within the vault
+    if (!normalizedVaultPath || !documentPath.startsWith(normalizedVaultPath)) {
+      return;
+    }
+
+    try {
+      // Ensure tree is loaded before revealing
+      await provider.ensurePreloaded();
+      
+      // Create a node for the active file
+      const node: ObsidianNode = { resourceUri: documentUri, isDirectory: false };
+      
+      // Reveal with expand to show parent folders
+      await treeView.reveal(node, { select: true, focus: false, expand: 3 });
+    } catch (error) {
+      // Silently fail if reveal doesn't work (e.g., file not in tree)
+      console.log('Could not reveal file in tree:', error);
+    }
+  };
+
+  const revealActiveFile = async (editor: vscode.TextEditor | undefined) => {
+    if (!editor || !editor.document) {
+      return;
+    }
+    await revealFileInTree(editor.document.uri);
+  };
+
+  // Reveal active file when editor changes (edit mode)
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor(revealActiveFile)
+  );
+
+  // Reveal active file when tab changes (handles preview mode)
+  context.subscriptions.push(
+    vscode.window.tabGroups.onDidChangeTabs(async (event) => {
+      const activeTab = vscode.window.tabGroups.activeTabGroup?.activeTab;
+      if (activeTab?.input instanceof vscode.TabInputText) {
+        await revealFileInTree(activeTab.input.uri);
+      } else if (activeTab?.input instanceof vscode.TabInputCustom) {
+        // Handle custom editors (like markdown preview)
+        const uri = (activeTab.input as any).uri;
+        if (uri) {
+          await revealFileInTree(uri);
+        }
+      }
+    })
+  );
+
+  // Reveal current active file on activation
+  revealActiveFile(vscode.window.activeTextEditor);
 
   // Create calendar webview
   let currentCalendarView: vscode.WebviewView | undefined;

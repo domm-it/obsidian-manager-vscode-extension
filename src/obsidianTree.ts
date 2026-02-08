@@ -134,13 +134,28 @@ export class ObsidianTreeProvider implements vscode.TreeDataProvider<ObsidianNod
   // Required by TreeView.reveal: return the parent element for a given element (or undefined for root-level)
   getParent(element: ObsidianNode): vscode.ProviderResult<ObsidianNode> {
     if (!element) return undefined;
-    const parentPath = path.dirname(element.resourceUri.fsPath);
-    if (!this.rootPath) return undefined;
-    // if parent is the configured root, return undefined so the tree treats it as top-level
-    if (parentPath === this.rootPath || parentPath === '' || parentPath === '.' || parentPath === path.sep) {
+    
+    const cfg = vscode.workspace.getConfiguration('obsidianManager');
+    const configuredVault = ((cfg.get<string>('vault') || '')).trim();
+    const root = this.normalizeToFsPath(configuredVault);
+    
+    if (!root) return undefined;
+    
+    const elementPath = path.normalize(element.resourceUri.fsPath);
+    const rootPath = path.normalize(root);
+    const parentPath = path.normalize(path.dirname(elementPath));
+    
+    // If element is at root level, return undefined
+    if (elementPath === rootPath || parentPath === rootPath) {
       return undefined;
     }
-    // return a node representing the parent directory
+    
+    // If parent is outside the vault, return undefined
+    if (!parentPath.startsWith(rootPath)) {
+      return undefined;
+    }
+    
+    // Return a node representing the parent directory
     return { resourceUri: vscode.Uri.file(parentPath), isDirectory: true } as ObsidianNode;
   }
 
