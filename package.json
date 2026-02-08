@@ -2,7 +2,7 @@
   "name": "obsidian-manager",
   "displayName": "Obsidian Manager",
   "description": "Adds a button and a vault/file manager view to open and manage Markdown files with Obsidian.",
-  "version": "1.6.2",
+  "version": "1.6.3",
   "publisher": "domm-it",
   "icon": "images/logo.png",
   "author": {
