@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { ObsidianTreeProvider } from './obsidianTree';
+import { TaskTableProvider } from './taskTableProvider';
 import * as path from 'path';
 import { promises as fs } from 'fs';
 import * as os from 'os';
@@ -2486,6 +2487,13 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   
   context.subscriptions.push(saveListener);
+
+  // Task Table Provider
+  const taskTableProvider = new TaskTableProvider(context);
+  const showTaskTableCmd = vscode.commands.registerCommand('obsidianManager.showTaskTable', async () => {
+    await taskTableProvider.show();
+  });
+  context.subscriptions.push(showTaskTableCmd);
 }
 
 export function deactivate() {}

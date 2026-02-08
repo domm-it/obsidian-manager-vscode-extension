@@ -259,6 +259,12 @@
         "command": "obsidianManager.openWikiLink",
         "title": "Open Wiki Link",
         "category": "Obsidian manager"
+      },
+      {
+        "command": "obsidianManager.showTaskTable",
+        "title": "Show Tasks Table",
+        "category": "Obsidian manager",
+        "icon": "$(table)"
       }
     ],
     "menus": {
@@ -430,6 +436,11 @@
           "command": "obsidianManager.openSettings",
           "when": "view == obsidianFiles",
           "group": "navigation@3"
+        },
+        {
+          "command": "obsidianManager.showTaskTable",
+          "when": "view == obsidianFiles",
+          "group": "navigation@4"
         }
       ]
     },
