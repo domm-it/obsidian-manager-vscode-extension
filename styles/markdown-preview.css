@@ -14,6 +14,10 @@ ol, ul {
     line-height: 2;
 }
 
+li p {
+    margin-bottom: 0;
+}
+
 /* Ensure nested lists appear below parent items */
 li > ul,
 li > ol {
@@ -155,8 +159,7 @@ input[type="checkbox"].task-list-item-checkbox:disabled {
 }
 
 .task-list-item.completed {
-    opacity: 0.6;
-    text-decoration: line-through;
+    opacity: 0.8;
 }
 
 /* Remove any paragraph margins inside task items */
@@ -342,4 +345,22 @@ label {
 
 .short-code-container:not(.copying):hover .short-code-copy-icon{
     display: inline-flex;
+}
+
+/*================================================================
+# MARK: HASHTAGS
+================================================================*/
+.hashtag {
+    display: inline-flex;
+    align-items: center;
+    background-color: #3A3D40;
+    border-radius: 3px;
+    padding: 0 4px;
+    font-family: var(--vscode-editor-font-family, monospace);
+    color: var(--vscode-textLink-foreground, #4EC9B0);
+    transition: background-color 0.2s ease;
+}
+
+.hashtag:hover {
+    background-color: #4A4D50;
 }

@@ -121,10 +121,89 @@
 
             addCopyToShortCode();
             
+            enhanceHashtags();
+            
             enhanceTaskCheckboxes();
 
         } catch (e) {
             console.warn('Error in initializeMarkdownEnhancements:', e);
+        }
+    }
+
+    /*================================================================
+    // region - HASHTAGS
+    ================================================================*/
+    function enhanceHashtags() {
+        try {
+            // Find all text nodes and wrap hashtags
+            const walker = document.createTreeWalker(
+                document.body,
+                NodeFilter.SHOW_TEXT,
+                {
+                    acceptNode: function(node) {
+                        // Skip if already processed or inside code/pre
+                        if (node.parentElement && 
+                            (node.parentElement.classList.contains('hashtag') ||
+                             node.parentElement.tagName === 'CODE' ||
+                             node.parentElement.tagName === 'PRE' ||
+                             node.parentElement.closest('pre, code'))) {
+                            return NodeFilter.FILTER_REJECT;
+                        }
+                        // Only process if text contains #
+                        if (node.textContent && node.textContent.includes('#')) {
+                            return NodeFilter.FILTER_ACCEPT;
+                        }
+                        return NodeFilter.FILTER_REJECT;
+                    }
+                }
+            );
+
+            const nodesToProcess = [];
+            let node;
+            while (node = walker.nextNode()) {
+                nodesToProcess.push(node);
+            }
+
+            // Process nodes and wrap hashtags
+            nodesToProcess.forEach(textNode => {
+                const text = textNode.textContent;
+                // Match hashtags: # followed by alphanumeric characters, underscores, or hyphens
+                const hashtagRegex = /#([a-zA-Z0-9_\-À-ÿ]+)/g;
+                
+                if (hashtagRegex.test(text)) {
+                    const fragment = document.createDocumentFragment();
+                    let lastIndex = 0;
+                    
+                    text.replace(hashtagRegex, (match, tag, offset) => {
+                        // Add text before hashtag
+                        if (offset > lastIndex) {
+                            fragment.appendChild(document.createTextNode(text.substring(lastIndex, offset)));
+                        }
+                        
+                        // Create hashtag span
+                        const hashtagSpan = document.createElement('span');
+                        hashtagSpan.className = 'hashtag';
+                        hashtagSpan.textContent = match;
+                        hashtagSpan.setAttribute('data-hashtag', tag);
+                        fragment.appendChild(hashtagSpan);
+                        
+                        lastIndex = offset + match.length;
+                        return match;
+                    });
+                    
+                    // Add remaining text
+                    if (lastIndex < text.length) {
+                        fragment.appendChild(document.createTextNode(text.substring(lastIndex)));
+                    }
+                    
+                    // Replace original text node with fragment
+                    if (textNode.parentNode) {
+                        textNode.parentNode.replaceChild(fragment, textNode);
+                    }
+                }
+            });
+        } catch (e) {
+            // Silent fail
         }
     }
 
@@ -191,15 +270,6 @@
                     
                     const checked = checkbox.checked;
                     
-                    // Visual feedback
-                    if (checked) {
-                        listItem.style.opacity = '0.6';
-                        listItem.style.textDecoration = 'line-through';
-                    } else {
-                        listItem.style.opacity = '1';
-                        listItem.style.textDecoration = 'none';
-                    }
-                    
                     // Send request to server to update the file
                     try {
                         const url = `http://localhost:${port}/checkbox/mark?source=${encodeURIComponent(source)}&line=${lineNumber}&checked=${checked}&nonce=${encodeURIComponent(nonce)}`;
@@ -211,12 +281,6 @@
                         // Silent fail
                     }
                 });
-                
-                // Apply initial styling based on checked state
-                if (checkbox.checked) {
-                    listItem.style.opacity = '0.6';
-                    listItem.style.textDecoration = 'line-through';
-                }
             });
         } catch (e) {
             // Silent fail
