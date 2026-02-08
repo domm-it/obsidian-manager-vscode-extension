@@ -51,15 +51,19 @@ export class TaskTableProvider {
       // Handle messages from the webview
       this.panel.webview.onDidReceiveMessage(
         async (message) => {
+          console.log('Received message from webview:', message);
           switch (message.command) {
             case 'toggleStatus':
-              await this.toggleTaskStatus(message.taskId);
-              break;
-            case 'deleteTask':
-              await this.deleteTask(message.taskId);
+              if (message.taskId) {
+                console.log('Toggle status for task:', message.taskId);
+                await this.toggleTaskStatus(message.taskId);
+              }
               break;
             case 'updateTask':
-              await this.updateTaskText(message.taskId, message.newText);
+              if (message.taskId) {
+                console.log('Update task:', message.taskId, 'with text:', message.newText);
+                await this.updateTaskText(message.taskId, message.newText);
+              }
               break;
           }
         },
@@ -199,29 +203,6 @@ export class TaskTableProvider {
     }
   }
 
-  private async deleteTask(taskId: string) {
-    const task = this.tasks.find(t => t.id === taskId);
-    if (!task) {
-      return;
-    }
-
-    try {
-      const content = await fs.readFile(task.filePath, 'utf-8');
-      const lines = content.split('\n');
-      
-      // Remove the line
-      lines.splice(task.lineNumber, 1);
-      await fs.writeFile(task.filePath, lines.join('\n'), 'utf-8');
-      
-      // Reload tasks and send updated data without full refresh
-      await this.loadTasks();
-      this.sendTasksUpdate();
-      
-    } catch (error) {
-      vscode.window.showErrorMessage(`Error deleting task: ${error}`);
-    }
-  }
-
   private async updateTaskText(taskId: string, newText: string) {
     const task = this.tasks.find(t => t.id === taskId);
     if (!task) {
@@ -269,16 +250,39 @@ export class TaskTableProvider {
     });
   }
 
+  private getNonce() {
+    let text = '';
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    for (let i = 0; i < 32; i++) {
+      text += possible.charAt(Math.floor(Math.random() * possible.length));
+    }
+    return text;
+  }
+
   private getWebviewContent(): string {
     const tasks = this.tasks;
     
     // Get unique projects for filter dropdown
     const projects = [...new Set(tasks.map(t => t.project))].sort();
     
+    // Helper function to escape HTML attributes
+    const escapeHtml = (str: string) => {
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    };
+    
+    // Generate a nonce for CSP
+    const nonce = this.getNonce();
+    
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Obsidian Tasks Table</title>
   <style>
@@ -338,6 +342,19 @@ export class TaskTableProvider {
       cursor: pointer;
       width: 16px;
       height: 16px;
+    }
+    
+    .filters input[type="text"] {
+      padding: 4px 8px;
+      background-color: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      border: 1px solid var(--vscode-input-border);
+      border-radius: 2px;
+      min-width: 200px;
+    }
+    
+    .filters input[type="text"]:focus {
+      outline: 1px solid var(--vscode-focusBorder);
     }
     
     table {
@@ -466,6 +483,10 @@ export class TaskTableProvider {
     <h1>📋 Obsidian Tasks</h1>
     <div class="filters">
       <div class="filter-group">
+        <label for="searchInput">Search:</label>
+        <input type="text" id="searchInput" placeholder="Filter by task, project or date..." />
+      </div>
+      <div class="filter-group">
         <label for="projectFilter">Project:</label>
         <select id="projectFilter">
           <option value="">All Projects</option>
@@ -491,17 +512,17 @@ export class TaskTableProvider {
           <th class="date-cell sortable" data-column="date">DATE</th>
           <th class="project-cell sortable" data-column="project">PROJECT</th>
           <th class="task-cell">TASK</th>
-          <th class="actions-cell">ACTIONS</th>
         </tr>
       </thead>
       <tbody>
-        ${tasks.map(task => `
-          <tr data-task-id="${task.id}" data-project="${task.project}" data-filepath="${task.filePath}" data-line-number="${task.lineNumber}">
+        ${tasks.map((task, index) => `
+          <tr data-task-id="${escapeHtml(task.id)}" data-index="${index}" data-project="${escapeHtml(task.project)}" data-filepath="${escapeHtml(task.filePath)}" data-line-number="${task.lineNumber}">
+
             <td class="status-cell">
               <input 
                 type="checkbox" 
-                ${task.status ? 'checked' : ''} 
-                onchange="toggleStatus('${task.id}')"
+                class="task-status-checkbox"
+                ${task.status ? 'checked' : ''}
               />
             </td>
             <td class="date-cell">${task.date}</td>
@@ -509,14 +530,9 @@ export class TaskTableProvider {
             <td class="task-cell">
               <input 
                 type="text" 
-                class="task-input" 
-                value="${task.task.replace(/"/g, '&quot;')}" 
-                onblur="updateTask('${task.id}', this.value)"
-                onkeydown="if(event.key === 'Enter') this.blur()"
+                class="task-input"
+                value="${task.task.replace(/"/g, '&quot;')}"
               />
-            </td>
-            <td class="actions-cell">
-              <button class="delete-btn" onclick="deleteTask('${task.id}')">Delete</button>
             </td>
           </tr>
         `).join('')}
@@ -524,49 +540,68 @@ export class TaskTableProvider {
     </table>
   `}
   
-  <script>
+  <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
+    
+    console.log('Script loaded');
     
     // Preserve state - default sort by date descending
     let currentSort = { column: 'date', direction: 'desc' };
     let currentFilter = '';
     let currentHideCompleted = false;
+    let currentSearchText = '';
     
-    function toggleStatus(taskId) {
-      vscode.postMessage({
-        command: 'toggleStatus',
-        taskId: taskId
-      });
-    }
-    
-    function deleteTask(taskId) {
-      if (confirm('Are you sure you want to delete this task?')) {
-        vscode.postMessage({
-          command: 'deleteTask',
-          taskId: taskId
-        });
+    // Event delegation for checkboxes
+    document.addEventListener('change', function(e) {
+      if (e.target.classList.contains('task-status-checkbox')) {
+        const row = e.target.closest('tr');
+        if (!row) return;
+        
+        const taskId = row.getAttribute('data-task-id');
+        if (taskId) {
+          vscode.postMessage({
+            command: 'toggleStatus',
+            taskId: taskId
+          });
+        }
       }
-    }
+    });
     
-    function updateTask(taskId, newText) {
-      vscode.postMessage({
-        command: 'updateTask',
-        taskId: taskId,
-        newText: newText
-      });
-    }
+    // Event delegation for text inputs
+    document.addEventListener('blur', function(e) {
+      if (e.target.classList.contains('task-input')) {
+        const row = e.target.closest('tr');
+        if (!row) return;
+        
+        const taskId = row.getAttribute('data-task-id');
+        if (taskId) {
+          vscode.postMessage({
+            command: 'updateTask',
+            taskId: taskId,
+            newText: e.target.value
+          });
+        }
+      }
+    }, true);
+    
+    // Enter key on inputs
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && e.target.classList.contains('task-input')) {
+        e.target.blur();
+      }
+    });
     
     function rebuildTable(tasks) {
       const tbody = document.querySelector('#tasksTable tbody');
       if (!tbody) return;
       
-      tbody.innerHTML = tasks.map(task => \`
+      tbody.innerHTML = tasks.map((task, index) => \`
         <tr data-task-id="\${task.id}" data-project="\${task.project}" data-filepath="\${task.filePath}" data-line-number="\${task.lineNumber}">
           <td class="status-cell">
             <input 
               type="checkbox" 
-              \${task.status ? 'checked' : ''} 
-              onchange="toggleStatus('\${task.id}')"
+              class="task-status-checkbox"
+              \${task.status ? 'checked' : ''}
             />
           </td>
           <td class="date-cell">\${task.date}</td>
@@ -574,17 +609,15 @@ export class TaskTableProvider {
           <td class="task-cell">
             <input 
               type="text" 
-              class="task-input" 
-              value="\${task.task.replace(/"/g, '&quot;')}" 
-              onblur="updateTask('\${task.id}', this.value)"
-              onkeydown="if(event.key === 'Enter') this.blur()"
+              class="task-input"
+              value="\${task.task.replace(/"/g, '&quot;')}"
             />
-          </td>
-          <td class="actions-cell">
-            <button class="delete-btn" onclick="deleteTask('\${task.id}')">Delete</button>
           </td>
         </tr>
       \`).join('');
+      
+      console.log('Table rebuilt with', tasks.length, 'tasks');
+      console.log('Delete buttons found:', document.querySelectorAll('.delete-btn').length);
       
       // Reapply filter
       applyFilter();
@@ -602,19 +635,44 @@ export class TaskTableProvider {
         applySorting();
       }
       
-      // Restore hide completed checkbox state
+      // Restore filter states
+      const projectFilter = document.getElementById('projectFilter');
+      if (projectFilter) {
+        projectFilter.value = currentFilter;
+      }
+      
       const hideCompletedCheckbox = document.getElementById('hideCompleted');
       if (hideCompletedCheckbox) {
         hideCompletedCheckbox.checked = currentHideCompleted;
+      }
+      
+      const searchInput = document.getElementById('searchInput');
+      if (searchInput) {
+        searchInput.value = currentSearchText;
       }
     }
     
     function applyFilter() {
       const rows = document.querySelectorAll('#tasksTable tbody tr');
+      const searchLower = currentSearchText.toLowerCase();
+      
       rows.forEach(row => {
         const matchesProject = !currentFilter || row.getAttribute('data-project') === currentFilter;
         const isCompleted = row.querySelector('input[type="checkbox"]').checked;
-        const shouldShow = matchesProject && (!currentHideCompleted || !isCompleted);
+        
+        // Search in task text, project, and date
+        let matchesSearch = true;
+        if (searchLower) {
+          const taskText = row.querySelector('.task-input').value.toLowerCase();
+          const project = row.getAttribute('data-project').toLowerCase();
+          const date = row.querySelector('.date-cell').textContent.toLowerCase();
+          
+          matchesSearch = taskText.includes(searchLower) || 
+                         project.includes(searchLower) || 
+                         date.includes(searchLower);
+        }
+        
+        const shouldShow = matchesProject && matchesSearch && (!currentHideCompleted || !isCompleted);
         
         row.style.display = shouldShow ? '' : 'none';
       });
@@ -689,6 +747,12 @@ export class TaskTableProvider {
         rebuildTable(message.tasks);
         updateProjectFilter(message.projects);
       }
+    });
+    
+    // Search filter
+    document.getElementById('searchInput')?.addEventListener('input', function(e) {
+      currentSearchText = e.target.value;
+      applyFilter();
     });
     
     // Project filter
