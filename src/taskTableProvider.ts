@@ -1344,6 +1344,60 @@ export class TaskTableProvider {
       height: 18px;
     }
     
+    .task-status-checkbox {
+      cursor: pointer;
+      width: 20px;
+      height: 20px;
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      border: 2px solid var(--vscode-button-background);
+      border-radius: 3px;
+      background-color: transparent;
+      position: relative;
+      transition: all 0.15s ease;
+    }
+    
+    .task-status-checkbox:hover {
+      border-color: var(--vscode-button-hoverBackground);
+      background-color: rgba(var(--vscode-button-background), 0.1);
+    }
+    
+    .task-status-checkbox:checked {
+      background-color: var(--vscode-button-background);
+      border-color: var(--vscode-button-background);
+    }
+    
+    .task-status-checkbox:checked::after {
+      content: '';
+      position: absolute;
+      left: 4px;
+      top: 0px;
+      width: 4px;
+      height: 10px;
+      border: solid var(--vscode-button-foreground);
+      border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+    }
+    
+    /* Style for completed tasks */
+    tr.task-completed {
+      opacity: 0.6;
+    }
+    
+    tr.task-completed .task-input {
+      color: var(--vscode-descriptionForeground);
+    }
+    
+    tr.task-completed .date-cell,
+    tr.task-completed .project-cell {
+      color: var(--vscode-descriptionForeground);
+    }
+    
+    tr.task-completed:hover {
+      opacity: 0.8;
+    }
+    
     .toggle-multiselect-btn {
       display: inline-flex;
       align-items: center;
@@ -1701,7 +1755,7 @@ export class TaskTableProvider {
       </thead>
       <tbody>
         ${tasks.map((task, index) => `
-          <tr data-task-id="${escapeHtml(task.id)}" data-index="${index}" data-project="${escapeHtml(task.project)}" data-file="${escapeHtml(path.basename(task.filePath))}" data-filepath="${escapeHtml(task.filePath)}" data-line-number="${task.lineNumber}">
+          <tr data-task-id="${escapeHtml(task.id)}" data-index="${index}" data-project="${escapeHtml(task.project)}" data-file="${escapeHtml(path.basename(task.filePath))}" data-filepath="${escapeHtml(task.filePath)}" data-line-number="${task.lineNumber}" class="${task.status ? 'task-completed' : ''}">
             <td class="select-cell">
               <input type="checkbox" class="select-checkbox task-select-checkbox" data-task-id="${escapeHtml(task.id)}" />
             </td>
@@ -1922,6 +1976,13 @@ export class TaskTableProvider {
         const row = e.target.closest('tr');
         if (!row) return;
         
+        // Update row class based on completed status
+        if (e.target.checked) {
+          row.classList.add('task-completed');
+        } else {
+          row.classList.remove('task-completed');
+        }
+        
         const taskId = row.getAttribute('data-task-id');
         if (taskId) {
           vscode.postMessage({
@@ -2094,9 +2155,10 @@ export class TaskTableProvider {
         const tagsHtml = tags.map(tag => '<span class="tag" data-tag="' + escapeHtml(tag) + '">' + escapeHtml(tag) + '<span class="tag-remove">×</span></span>').join('');
         const filename = task.filePath.split('/').pop() || task.filePath.split('\\\\').pop() || task.filePath;
         const isSelected = selectedTaskIds.has(task.id);
+        const completedClass = task.status ? ' task-completed' : '';
         
         return \`
-        <tr data-task-id="\${task.id}" data-project="\${task.project}" data-file="\${filename}" data-filepath="\${task.filePath}" data-line-number="\${task.lineNumber}">
+        <tr data-task-id="\${task.id}" data-project="\${task.project}" data-file="\${filename}" data-filepath="\${task.filePath}" data-line-number="\${task.lineNumber}" class="\${completedClass.trim()}">
           <td class="select-cell">
             <input type="checkbox" class="select-checkbox task-select-checkbox" data-task-id="\${task.id}" \${isSelected ? 'checked' : ''} />
           </td>
