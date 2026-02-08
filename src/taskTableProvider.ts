@@ -71,14 +71,20 @@ export class TaskTableProvider {
                 await this.openFileAtLine(message.filePath, message.lineNumber);
               }
               break;
+            case 'addTaskAfter':
+              if (message.taskId) {
+                console.log('Add task after:', message.taskId);
+                await this.addTaskAfter(message.taskId);
+              }
+              break;
+
             case 'deleteTask':
               if (message.taskId) {
                 console.log('Delete task:', message.taskId);
                 const answer = await vscode.window.showWarningMessage(
                   'Are you sure you want to delete this task?',
                   { modal: true },
-                  'Delete',
-                  'Cancel'
+                  'Delete'
                 );
                 if (answer === 'Delete') {
                   await this.deleteTask(message.taskId);
@@ -274,8 +280,8 @@ export class TaskTableProvider {
       const content = await fs.readFile(task.filePath, 'utf-8');
       const lines = content.split('\n');
       
-      // Replace the line with empty string (leaves blank line)
-      lines[task.lineNumber] = '';
+      // Remove the line completely
+      lines.splice(task.lineNumber, 1);
       
       await fs.writeFile(task.filePath, lines.join('\n'), 'utf-8');
       
@@ -288,6 +294,33 @@ export class TaskTableProvider {
     }
   }
 
+  private async addTaskAfter(taskId: string) {
+    const task = this.tasks.find(t => t.id === taskId);
+    if (!task) {
+      return;
+    }
+
+    try {
+      const content = await fs.readFile(task.filePath, 'utf-8');
+      const lines = content.split('\n');
+      
+      // Insert new empty task line after the current task
+      lines.splice(task.lineNumber + 1, 0, '- [ ] ');
+      
+      await fs.writeFile(task.filePath, lines.join('\n'), 'utf-8');
+      
+      // Reload tasks and send updated data without full refresh
+      await this.loadTasks();
+      
+      // Generate new task ID (filePath:lineNumber)
+      const newTaskId = `${task.filePath}:${task.lineNumber + 1}`;
+      this.sendTasksUpdate(newTaskId);
+      
+    } catch (error) {
+      vscode.window.showErrorMessage(`Error adding task: ${error}`);
+    }
+  }
+
   private updateWebview() {
     if (!this.panel) {
       return;
@@ -296,7 +329,7 @@ export class TaskTableProvider {
     this.panel.webview.html = this.getWebviewContent();
   }
 
-  private sendTasksUpdate() {
+  private sendTasksUpdate(focusTaskId?: string) {
     if (!this.panel) {
       return;
     }
@@ -305,7 +338,8 @@ export class TaskTableProvider {
     this.panel.webview.postMessage({
       command: 'updateTasks',
       tasks: this.tasks,
-      projects: [...new Set(this.tasks.map(t => t.project))].sort()
+      projects: [...new Set(this.tasks.map(t => t.project))].sort(),
+      focusTaskId: focusTaskId
     });
   }
 
@@ -601,6 +635,24 @@ export class TaskTableProvider {
       opacity: 1;
     }
     
+    .insert-cell {
+      width: 40px;
+      min-width: 40px;
+      text-align: center;
+      padding: 4px !important;
+    }
+    
+    .add-icon {
+      cursor: pointer;
+      color: var(--vscode-textLink-foreground);
+      opacity: 0.8;
+      font-size: 16px !important;
+    }
+    
+    .add-icon:hover {
+      opacity: 1;
+    }
+    
     .actions-cell {
       width: 40px;
       min-width: 40px;
@@ -714,6 +766,7 @@ export class TaskTableProvider {
           <th class="date-cell sortable" data-column="date">DATE</th>
           <th class="project-cell sortable" data-column="project">PROJECT</th>
           <th class="task-cell">TASK</th>
+          <th class="insert-cell"></th>
           <th class="actions-cell"></th>
         </tr>
       </thead>
@@ -739,6 +792,9 @@ export class TaskTableProvider {
                   value="${task.task.replace(/"/g, '&quot;')}"
                 />
               </div>
+            </td>
+            <td class="insert-cell">
+              <span class="codicon codicon-add add-icon" title="Add task after"></span>
             </td>
             <td class="actions-cell">
               <span class="codicon codicon-trash delete-icon" title="Delete task"></span>
@@ -819,6 +875,21 @@ export class TaskTableProvider {
         }
       }
       
+      // Click on add icon
+      if (e.target.classList.contains('add-icon')) {
+        const row = e.target.closest('tr');
+        if (!row) return;
+        
+        const taskId = row.getAttribute('data-task-id');
+        
+        if (taskId) {
+          vscode.postMessage({
+            command: 'addTaskAfter',
+            taskId: taskId
+          });
+        }
+      }
+      
       // Click on delete icon
       if (e.target.classList.contains('delete-icon')) {
         const row = e.target.closest('tr');
@@ -859,6 +930,9 @@ export class TaskTableProvider {
                 value="\${task.task.replace(/"/g, '&quot;')}"
               />
             </div>
+          </td>
+          <td class="insert-cell">
+            <span class="codicon codicon-add add-icon" title="Add task after"></span>
           </td>
           <td class="actions-cell">
             <span class="codicon codicon-trash delete-icon" title="Delete task"></span>
@@ -1013,6 +1087,20 @@ export class TaskTableProvider {
       if (message.command === 'updateTasks') {
         rebuildTable(message.tasks);
         updateProjectFilter(message.projects);
+        
+        // Focus on new task input if specified
+        if (message.focusTaskId) {
+          setTimeout(() => {
+            const row = document.querySelector('tr[data-task-id="' + message.focusTaskId + '"]');
+            if (row) {
+              const input = row.querySelector('.task-input');
+              if (input) {
+                input.focus();
+                input.select();
+              }
+            }
+          }, 100);
+        }
       }
     });
     
