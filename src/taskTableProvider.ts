@@ -114,6 +114,25 @@ export class TaskTableProvider {
             case 'selectProjects':
               await this.selectProjectsFilter(message.currentSelection || []);
               break;
+            
+            case 'bulkDeleteTasks':
+              if (message.taskIds && Array.isArray(message.taskIds) && message.taskIds.length > 0) {
+                const answer = await vscode.window.showWarningMessage(
+                  `Are you sure you want to delete ${message.taskIds.length} task(s)?`,
+                  { modal: true },
+                  'Delete'
+                );
+                if (answer === 'Delete') {
+                  await this.bulkDeleteTasks(message.taskIds);
+                }
+              }
+              break;
+            
+            case 'bulkMoveTasks':
+              if (message.taskIds && Array.isArray(message.taskIds) && message.taskIds.length > 0) {
+                await this.bulkMoveTasks(message.taskIds);
+              }
+              break;
           }
         },
         undefined,
@@ -614,6 +633,254 @@ export class TaskTableProvider {
     }
   }
 
+  private async bulkDeleteTasks(taskIds: string[]): Promise<void> {
+    try {
+      // Group tasks by file to minimize file I/O operations
+      const tasksByFile = new Map<string, Task[]>();
+      
+      for (const taskId of taskIds) {
+        const task = this.tasks.find(t => t.id === taskId);
+        if (task) {
+          if (!tasksByFile.has(task.filePath)) {
+            tasksByFile.set(task.filePath, []);
+          }
+          tasksByFile.get(task.filePath)!.push(task);
+        }
+      }
+      
+      // Process each file
+      for (const [filePath, tasksToDelete] of tasksByFile.entries()) {
+        const content = await fs.readFile(filePath, 'utf-8');
+        const lines = content.split('\n');
+        
+        // Sort tasks by line number in descending order to avoid index shifting issues
+        tasksToDelete.sort((a, b) => b.lineNumber - a.lineNumber);
+        
+        // Delete lines from bottom to top
+        for (const task of tasksToDelete) {
+          lines.splice(task.lineNumber, 1);
+        }
+        
+        await fs.writeFile(filePath, lines.join('\n'), 'utf-8');
+      }
+      
+      // Reload tasks and update view
+      await this.loadTasks();
+      this.sendTasksUpdate();
+      
+      // Refresh vault tree to show updated files
+      await vscode.commands.executeCommand('obsidianManager.refreshView');
+      
+      // Refresh hashtags tree
+      vscode.commands.executeCommand('obsidianManager.refreshHashtags');
+      
+      vscode.window.showInformationMessage(`Successfully deleted ${taskIds.length} task(s)`);
+      
+    } catch (error) {
+      vscode.window.showErrorMessage(`Error deleting tasks: ${error}`);
+    }
+  }
+
+  private async bulkMoveTasks(taskIds: string[]): Promise<void> {
+    try {
+      // Get the list of all date-prefixed markdown files in the vault
+      const allFiles = await this.findDatePrefixedMarkdownFiles(this.vaultPath);
+      
+      // Create quick pick items with relative paths
+      interface FileQuickPickItem extends vscode.QuickPickItem {
+        filePath?: string;
+      }
+      
+      const items: FileQuickPickItem[] = allFiles.map(filePath => {
+        const relativePath = path.relative(this.vaultPath, filePath);
+        const fileName = path.basename(filePath);
+        return {
+          label: fileName,
+          description: path.dirname(relativePath),
+          filePath: filePath
+        };
+      }).sort((a, b) => a.label.localeCompare(b.label));
+      
+      // Get current date in YYYY-MM-DD format
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const defaultFileName = `${year}-${month}-${day}-`;
+      
+      // Create custom QuickPick for better control
+      const quickPick = vscode.window.createQuickPick<FileQuickPickItem>();
+      quickPick.title = 'Move Tasks to File';
+      quickPick.placeholder = `Type to search or create new file (press Enter to create)`;
+      quickPick.items = items;
+      quickPick.matchOnDescription = true;
+      quickPick.value = defaultFileName; // Set default value with today's date
+      
+      // Wait for user to select or create
+      const result = await new Promise<{ file?: FileQuickPickItem; createNew?: string } | undefined>((resolve) => {
+        quickPick.onDidAccept(() => {
+          if (quickPick.selectedItems.length > 0) {
+            // User selected an existing file
+            resolve({ file: quickPick.selectedItems[0] });
+            quickPick.hide();
+          } else if (quickPick.value.trim()) {
+            // User typed something but didn't select - create new file
+            let newFileName = quickPick.value.trim();
+            // Add .md if not present
+            if (!newFileName.endsWith('.md')) {
+              newFileName += '.md';
+            }
+            resolve({ createNew: newFileName });
+            quickPick.hide();
+          } else {
+            // Empty input
+            resolve(undefined);
+            quickPick.hide();
+          }
+        });
+        
+        quickPick.onDidHide(() => {
+          resolve(undefined);
+          quickPick.dispose();
+        });
+        
+        quickPick.show();
+      });
+      
+      if (!result) {
+        return; // User cancelled
+      }
+      
+      // Handle file creation or selection
+      let destinationFilePath: string;
+      let destinationFileName: string;
+      let fileCreated = false;
+      
+      if (result.createNew) {
+        const newFileNameFromInput = result.createNew;
+        
+        // Validate file name
+        if (/[\/\\:*?"<>|]/.test(newFileNameFromInput)) {
+          vscode.window.showErrorMessage('File name contains invalid characters');
+          return;
+        }
+        
+        // Create the full path in the vault root
+        destinationFilePath = path.join(this.vaultPath, newFileNameFromInput);
+        destinationFileName = newFileNameFromInput;
+        
+        // Check if file already exists
+        try {
+          await fs.access(destinationFilePath);
+          const overwrite = await vscode.window.showWarningMessage(
+            `File "${newFileNameFromInput}" already exists. Do you want to append tasks to it?`,
+            { modal: true },
+            'Append',
+            'Cancel'
+          );
+          if (overwrite !== 'Append') {
+            return;
+          }
+        } catch {
+          // File doesn't exist, create it with minimal content
+          const cfg = vscode.workspace.getConfiguration('obsidianManager');
+          const addTitle = cfg.get<boolean>('addTitleToNewFiles', true);
+          
+          let content = '';
+          if (addTitle) {
+            const title = newFileNameFromInput.replace(/\.md$/, '');
+            content = `# ${title}\n\n`;
+          }
+          
+          await fs.writeFile(destinationFilePath, content, 'utf-8');
+          fileCreated = true;
+        }
+      } else if (result.file) {
+        destinationFilePath = result.file.filePath!;
+        destinationFileName = result.file.label;
+      } else {
+        return;
+      }
+      
+      // Collect tasks to move
+      const tasksToMove: Task[] = [];
+      for (const taskId of taskIds) {
+        const task = this.tasks.find(t => t.id === taskId);
+        if (task) {
+          tasksToMove.push(task);
+        }
+      }
+      
+      if (tasksToMove.length === 0) {
+        return;
+      }
+      
+      // Group tasks by source file
+      const tasksBySourceFile = new Map<string, Task[]>();
+      for (const task of tasksToMove) {
+        if (!tasksBySourceFile.has(task.filePath)) {
+          tasksBySourceFile.set(task.filePath, []);
+        }
+        tasksBySourceFile.get(task.filePath)!.push(task);
+      }
+      
+      // Read destination file
+      const destContent = await fs.readFile(destinationFilePath, 'utf-8');
+      const destLines = destContent.split('\n');
+      
+      // Collect task lines to append
+      const taskLinesToAppend: string[] = [];
+      
+      // Process each source file
+      for (const [sourceFilePath, tasks] of tasksBySourceFile.entries()) {
+        const sourceContent = await fs.readFile(sourceFilePath, 'utf-8');
+        const sourceLines = sourceContent.split('\n');
+        
+        // Sort tasks by line number in descending order
+        tasks.sort((a, b) => b.lineNumber - a.lineNumber);
+        
+        // Extract and delete lines from source
+        for (const task of tasks) {
+          const line = sourceLines[task.lineNumber];
+          taskLinesToAppend.push(line);
+          sourceLines.splice(task.lineNumber, 1);
+        }
+        
+        // Write back to source file
+        await fs.writeFile(sourceFilePath, sourceLines.join('\n'), 'utf-8');
+      }
+      
+      // Append tasks to destination file
+      if (taskLinesToAppend.length > 0) {
+        // Add a newline if the file doesn't end with one
+        if (destLines[destLines.length - 1] !== '') {
+          destLines.push('');
+        }
+        
+        // Append tasks (they were collected in reverse order, so reverse them back)
+        taskLinesToAppend.reverse();
+        destLines.push(...taskLinesToAppend);
+        
+        await fs.writeFile(destinationFilePath, destLines.join('\n'), 'utf-8');
+      }
+      
+      // Reload tasks and update view
+      await this.loadTasks();
+      this.sendTasksUpdate();
+      
+      // Refresh vault tree to show new/updated files
+      await vscode.commands.executeCommand('obsidianManager.refreshView');
+      
+      // Refresh hashtags tree
+      vscode.commands.executeCommand('obsidianManager.refreshHashtags');
+      
+      vscode.window.showInformationMessage(`Successfully moved ${taskIds.length} task(s) to ${destinationFileName}`);
+      
+    } catch (error) {
+      vscode.window.showErrorMessage(`Error moving tasks: ${error}`);
+    }
+  }
+
   private async selectFilesFilter(currentSelection: string[]): Promise<void> {
     try {
       // Get all unique files from tasks
@@ -808,6 +1075,11 @@ export class TaskTableProvider {
       color: var(--vscode-foreground);
       background-color: var(--vscode-editor-background);
       padding: 20px;
+    }
+
+    .title-container{
+      display: flex;
+      gap: 10px;
     }
     
     .header {
@@ -1055,6 +1327,100 @@ export class TaskTableProvider {
       width: 40px;
     }
     
+    .select-cell {
+      text-align: center;
+      width: 40px;
+      min-width: 40px;
+      display: none; /* Hidden by default */
+    }
+    
+    body.multiselect-active .select-cell {
+      display: table-cell; /* Show when multiselect is active */
+    }
+    
+    .select-checkbox {
+      cursor: pointer;
+      width: 18px;
+      height: 18px;
+    }
+    
+    .toggle-multiselect-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      margin-top: 8px;
+      background-color: var(--vscode-button-secondaryBackground);
+      color: var(--vscode-button-secondaryForeground);
+      border: 1px solid var(--vscode-button-border);
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 12px;
+      font-family: var(--vscode-font-family);
+    }
+    
+    .toggle-multiselect-btn:hover {
+      background-color: var(--vscode-button-secondaryHoverBackground);
+    }
+    
+    .toggle-multiselect-btn.active {
+      background-color: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+    }
+    
+    .bulk-actions-toolbar {
+      background-color: var(--vscode-badge-background);
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 4px;
+      padding: 2px 2px 2px 10px;
+      margin-top: 2px;
+      display: none;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    .bulk-actions-toolbar.visible {
+      display: flex;
+    }
+    
+    .bulk-actions-info {
+      font-weight: 500;
+      color: var(--vscode-foreground);
+    }
+    
+    .bulk-actions-buttons {
+      display: flex;
+      gap: 2px;
+      margin-left: auto;
+    }
+    
+    .bulk-action-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background-color: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+      border: none;
+      border-radius: 2px;
+      cursor: pointer;
+      font-size: 13px;
+      font-family: var(--vscode-font-family);
+    }
+    
+    .bulk-action-btn:hover {
+      background-color: var(--vscode-button-hoverBackground);
+    }
+    
+    .bulk-action-btn.danger {
+      background-color: var(--vscode-inputValidation-errorBackground);
+      color: var(--vscode-inputValidation-errorForeground);
+    }
+    
+    .bulk-action-btn.danger:hover {
+      opacity: 0.9;
+    }
+    
     .date-cell {
       width: 120px;
       font-family: monospace;
@@ -1243,7 +1609,31 @@ export class TaskTableProvider {
 <body>
   <div class="header">
     <div>
-      <h1>Tasks <span class="task-count" id="taskCount"></span></h1>
+
+      <div class="title-container">
+        <h1>Tasks <span class="task-count" id="taskCount"></span></h1>
+        <button id="toggleMultiselectBtn" class="toggle-multiselect-btn" title="Enable/disable multi-task selection">
+          <span class="codicon codicon-checklist"></span>
+        </button>
+      </div>
+
+      <!-- Bulk Actions Toolbar -->
+      <div id="bulkActionsToolbar" class="bulk-actions-toolbar">
+        <span class="bulk-actions-info">
+          <span id="selectedCount">0</span> task(s) selected
+        </span>
+        <div class="bulk-actions-buttons">
+          <button id="bulkMoveBtn" class="bulk-action-btn" title="Move selected tasks to another file">
+            Move
+          </button>
+          <button id="bulkDeleteBtn" class="bulk-action-btn danger" title="Delete selected tasks">
+            <span class="codicon codicon-trash"></span>
+          </button>
+          <button id="clearSelectionBtn" class="bulk-action-btn" title="Clear selection">
+            <span class="codicon codicon-close"></span>
+          </button>
+        </div>
+      </div>
     </div>
     <div class="filters-conteiner">
       <div class="filters">
@@ -1297,6 +1687,9 @@ export class TaskTableProvider {
     <table id="tasksTable">
       <thead>
         <tr>
+          <th class="select-cell">
+            <input type="checkbox" id="selectAllCheckbox" class="select-checkbox" title="Select all tasks" />
+          </th>
           <th class="status-cell sortable" data-column="status"></th>
           <th class="date-cell sortable" data-column="date">DATE</th>
           <th class="project-cell sortable" data-column="project">PROJECT</th>
@@ -1309,7 +1702,9 @@ export class TaskTableProvider {
       <tbody>
         ${tasks.map((task, index) => `
           <tr data-task-id="${escapeHtml(task.id)}" data-index="${index}" data-project="${escapeHtml(task.project)}" data-file="${escapeHtml(path.basename(task.filePath))}" data-filepath="${escapeHtml(task.filePath)}" data-line-number="${task.lineNumber}">
-
+            <td class="select-cell">
+              <input type="checkbox" class="select-checkbox task-select-checkbox" data-task-id="${escapeHtml(task.id)}" />
+            </td>
             <td class="status-cell">
               <input 
                 type="checkbox" 
@@ -1367,6 +1762,159 @@ export class TaskTableProvider {
     let currentSearchText = '';
     let currentDateFilter = '';
     let currentFileFilter = []; // Array of selected files
+    let selectedTaskIds = new Set(); // Set of selected task IDs for bulk operations
+    let multiselectActive = false; // Multi-select mode state
+    
+    // Toggle multiselect button handler
+    document.getElementById('toggleMultiselectBtn')?.addEventListener('click', function() {
+      multiselectActive = !multiselectActive;
+      const btn = document.getElementById('toggleMultiselectBtn');
+      
+      if (multiselectActive) {
+        document.body.classList.add('multiselect-active');
+        btn?.classList.add('active');
+      } else {
+        document.body.classList.remove('multiselect-active');
+        btn?.classList.remove('active');
+        
+        // Clear all selections when disabling multiselect
+        selectedTaskIds.clear();
+        document.querySelectorAll('.task-select-checkbox').forEach(cb => {
+          cb.checked = false;
+        });
+        const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+        if (selectAllCheckbox) {
+          selectAllCheckbox.checked = false;
+          selectAllCheckbox.indeterminate = false;
+        }
+        updateBulkActionsToolbar();
+      }
+    });
+    
+    // Function to update bulk actions toolbar visibility and count
+    function updateBulkActionsToolbar() {
+      const toolbar = document.getElementById('bulkActionsToolbar');
+      const countSpan = document.getElementById('selectedCount');
+      
+      if (!toolbar || !countSpan) return;
+      
+      const count = selectedTaskIds.size;
+      countSpan.textContent = count.toString();
+      
+      if (count > 0) {
+        toolbar.classList.add('visible');
+      } else {
+        toolbar.classList.remove('visible');
+      }
+    }
+    
+    // Function to update "Select All" checkbox state
+    function updateSelectAllCheckbox() {
+      const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+      if (!selectAllCheckbox) return;
+      
+      const allCheckboxes = document.querySelectorAll('.task-select-checkbox');
+      const visibleCheckboxes = Array.from(allCheckboxes).filter(cb => {
+        const row = cb.closest('tr');
+        return row && row.style.display !== 'none';
+      });
+      
+      if (visibleCheckboxes.length === 0) {
+        selectAllCheckbox.checked = false;
+        selectAllCheckbox.indeterminate = false;
+        return;
+      }
+      
+      const checkedCount = visibleCheckboxes.filter(cb => cb.checked).length;
+      
+      if (checkedCount === 0) {
+        selectAllCheckbox.checked = false;
+        selectAllCheckbox.indeterminate = false;
+      } else if (checkedCount === visibleCheckboxes.length) {
+        selectAllCheckbox.checked = true;
+        selectAllCheckbox.indeterminate = false;
+      } else {
+        selectAllCheckbox.checked = false;
+        selectAllCheckbox.indeterminate = true;
+      }
+    }
+    
+    // "Select All" checkbox handler
+    document.addEventListener('change', function(e) {
+      if (e.target.id === 'selectAllCheckbox') {
+        const isChecked = e.target.checked;
+        const visibleCheckboxes = document.querySelectorAll('.task-select-checkbox');
+        
+        visibleCheckboxes.forEach(checkbox => {
+          const row = checkbox.closest('tr');
+          if (row && row.style.display !== 'none') {
+            const taskId = checkbox.getAttribute('data-task-id');
+            checkbox.checked = isChecked;
+            
+            if (isChecked) {
+              selectedTaskIds.add(taskId);
+            } else {
+              selectedTaskIds.delete(taskId);
+            }
+          }
+        });
+        
+        updateBulkActionsToolbar();
+        updateSelectAllCheckbox();
+      }
+    });
+    
+    // Individual task selection handler
+    document.addEventListener('change', function(e) {
+      if (e.target.classList.contains('task-select-checkbox') && e.target.id !== 'selectAllCheckbox') {
+        const taskId = e.target.getAttribute('data-task-id');
+        
+        if (e.target.checked) {
+          selectedTaskIds.add(taskId);
+        } else {
+          selectedTaskIds.delete(taskId);
+        }
+        
+        updateBulkActionsToolbar();
+        updateSelectAllCheckbox();
+      }
+    });
+    
+    // Bulk action buttons
+    document.getElementById('bulkDeleteBtn')?.addEventListener('click', function() {
+      if (selectedTaskIds.size === 0) return;
+      
+      vscode.postMessage({
+        command: 'bulkDeleteTasks',
+        taskIds: Array.from(selectedTaskIds)
+      });
+      
+      // Clear selection after action
+      selectedTaskIds.clear();
+      updateBulkActionsToolbar();
+    });
+    
+    document.getElementById('bulkMoveBtn')?.addEventListener('click', function() {
+      if (selectedTaskIds.size === 0) return;
+      
+      vscode.postMessage({
+        command: 'bulkMoveTasks',
+        taskIds: Array.from(selectedTaskIds)
+      });
+      
+      // Clear selection after action
+      selectedTaskIds.clear();
+      updateBulkActionsToolbar();
+    });
+    
+    document.getElementById('clearSelectionBtn')?.addEventListener('click', function() {
+      selectedTaskIds.clear();
+      document.querySelectorAll('.task-select-checkbox').forEach(cb => {
+        cb.checked = false;
+      });
+      updateBulkActionsToolbar();
+      updateSelectAllCheckbox();
+    });
     
     // Event delegation for checkboxes
     document.addEventListener('change', function(e) {
@@ -1545,9 +2093,13 @@ export class TaskTableProvider {
         const tags = extractTags(task.task);
         const tagsHtml = tags.map(tag => '<span class="tag" data-tag="' + escapeHtml(tag) + '">' + escapeHtml(tag) + '<span class="tag-remove">×</span></span>').join('');
         const filename = task.filePath.split('/').pop() || task.filePath.split('\\\\').pop() || task.filePath;
+        const isSelected = selectedTaskIds.has(task.id);
         
         return \`
         <tr data-task-id="\${task.id}" data-project="\${task.project}" data-file="\${filename}" data-filepath="\${task.filePath}" data-line-number="\${task.lineNumber}">
+          <td class="select-cell">
+            <input type="checkbox" class="select-checkbox task-select-checkbox" data-task-id="\${task.id}" \${isSelected ? 'checked' : ''} />
+          </td>
           <td class="status-cell">
             <input 
               type="checkbox" 
@@ -1622,6 +2174,10 @@ export class TaskTableProvider {
         }
       }
       
+      // Update selection UI
+      updateBulkActionsToolbar();
+      updateSelectAllCheckbox();
+      
       // Then apply sort
       if (currentSort.column) {
         // Update UI to show current sort
@@ -1646,7 +2202,7 @@ export class TaskTableProvider {
       
       rows.forEach(row => {
         const matchesProject = currentFilter.length === 0 || currentFilter.includes(row.getAttribute('data-project'));
-        const isCompleted = row.querySelector('input[type="checkbox"]').checked;
+        const isCompleted = row.querySelector('.task-status-checkbox').checked;
         
         // Date filter
         const date = row.querySelector('.date-cell').textContent;
@@ -1687,6 +2243,9 @@ export class TaskTableProvider {
       if (taskCountEl) {
         taskCountEl.textContent = '(' + visibleCount + ')';
       }
+      
+      // Update "Select All" checkbox state after filtering
+      updateSelectAllCheckbox();
     }
     
     function applySorting() {
@@ -1699,8 +2258,8 @@ export class TaskTableProvider {
         let aVal, bVal;
         
         if (currentSort.column === 'status') {
-          aVal = a.querySelector('input[type="checkbox"]').checked ? 1 : 0;
-          bVal = b.querySelector('input[type="checkbox"]').checked ? 1 : 0;
+          aVal = a.querySelector('.task-status-checkbox').checked ? 1 : 0;
+          bVal = b.querySelector('.task-status-checkbox').checked ? 1 : 0;
         } else if (currentSort.column === 'date') {
           aVal = a.querySelector('.date-cell').textContent;
           bVal = b.querySelector('.date-cell').textContent;
@@ -1741,6 +2300,16 @@ export class TaskTableProvider {
     window.addEventListener('message', event => {
       const message = event.data;
       if (message.command === 'updateTasks') {
+        // Clean up selectedTaskIds - remove any that no longer exist in the task list
+        const taskIds = new Set(message.tasks.map(t => t.id));
+        const idsToRemove = [];
+        selectedTaskIds.forEach(id => {
+          if (!taskIds.has(id)) {
+            idsToRemove.push(id);
+          }
+        });
+        idsToRemove.forEach(id => selectedTaskIds.delete(id));
+        
         rebuildTable(message.tasks);
         
         let filterApplied = false;
