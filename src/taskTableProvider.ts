@@ -85,6 +85,12 @@ export class TaskTableProvider {
                 }
               }
               break;
+            
+            case 'editTags':
+              if (message.taskId) {
+                await this.editTaskTags(message.taskId);
+              }
+              break;
           }
         },
         undefined,
@@ -364,6 +370,146 @@ export class TaskTableProvider {
     } catch (error) {
       vscode.window.showErrorMessage(`Error adding task: ${error}`);
     }
+  }
+
+  private async editTaskTags(taskId: string) {
+    const task = this.tasks.find(t => t.id === taskId);
+    if (!task) {
+      return;
+    }
+
+    try {
+      // Extract current hashtags from task
+      const currentTags = this.extractHashtags(task.task);
+      
+      // Get all unique hashtags from all tasks
+      const allHashtags = new Set<string>();
+      for (const t of this.tasks) {
+        const tags = this.extractHashtags(t.task);
+        tags.forEach(tag => allHashtags.add(tag));
+      }
+      
+      // Convert to array and sort
+      const availableTags = Array.from(allHashtags).sort();
+      
+      // Create QuickPick items
+      interface TagQuickPickItem extends vscode.QuickPickItem {
+        tag: string;
+      }
+      
+      // Create a custom QuickPick for better control
+      const quickPick = vscode.window.createQuickPick<TagQuickPickItem>();
+      quickPick.title = 'Edit Task Hashtags';
+      quickPick.placeholder = 'Type to search or create new hashtag (without #)';
+      quickPick.canSelectMany = true;
+      quickPick.matchOnDescription = true;
+      quickPick.matchOnDetail = true;
+      
+      // Initial items
+      const createItems = (filter: string = ''): TagQuickPickItem[] => {
+        const items: TagQuickPickItem[] = availableTags.map(tag => ({
+          label: tag,
+          tag: tag,
+          picked: currentTags.includes(tag)
+        }));
+        
+        // If user is typing and it doesn't match any existing tag, add create option
+        const filterNormalized = filter.trim().replace(/^#/, '');
+        if (filterNormalized && !availableTags.some(tag => tag === `#${filterNormalized}`)) {
+          items.unshift({
+            label: `#${filterNormalized}`,
+            tag: `#${filterNormalized}`,
+            description: '$(add) Create new',
+            picked: false
+          });
+        }
+        
+        return items;
+      };
+      
+      quickPick.items = createItems();
+      
+      // Pre-select currently active tags
+      quickPick.selectedItems = quickPick.items.filter(item => currentTags.includes(item.tag));
+      
+      // Update items as user types
+      quickPick.onDidChangeValue(value => {
+        quickPick.items = createItems(value);
+        // Re-apply selection after items change
+        const selectedTags = quickPick.selectedItems.map(item => item.tag);
+        quickPick.selectedItems = quickPick.items.filter(item => selectedTags.includes(item.tag));
+      });
+      
+      // Wait for user to accept or cancel
+      const finalTags = await new Promise<string[] | undefined>((resolve) => {
+        quickPick.onDidAccept(() => {
+          let selected = quickPick.selectedItems.map(item => item.tag);
+          
+          // If user has typed something and pressed Enter, auto-add it if it's new
+          const currentValue = quickPick.value.trim().replace(/^#/, '');
+          if (currentValue) {
+            const newTag = `#${currentValue}`;
+            // Check if this tag doesn't exist in available tags and isn't already selected
+            if (!availableTags.includes(newTag) && !selected.includes(newTag)) {
+              selected.push(newTag);
+            }
+          }
+          
+          quickPick.hide();
+          resolve(selected);
+        });
+        
+        quickPick.onDidHide(() => {
+          resolve(undefined);
+          quickPick.dispose();
+        });
+        
+        quickPick.show();
+      });
+      
+      if (!finalTags) {
+        return; // User cancelled
+      }
+      
+      // Update task text by removing old hashtags and adding new ones
+      let newTaskText = task.task;
+      
+      // Remove all existing hashtags
+      currentTags.forEach(tag => {
+        newTaskText = newTaskText.replace(new RegExp(tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '').trim();
+      });
+      
+      // Add selected hashtags at the end
+      if (finalTags.length > 0) {
+        newTaskText = `${newTaskText} ${finalTags.join(' ')}`.trim();
+      }
+      
+      // Update the task
+      const content = await fs.readFile(task.filePath, 'utf-8');
+      const lines = content.split('\n');
+      const line = lines[task.lineNumber];
+      const checkbox = task.status ? '- [x]' : '- [ ]';
+      const indent = line.match(/^(\s*)/)?.[1] || '';
+      
+      lines[task.lineNumber] = `${indent}${checkbox} ${newTaskText}`;
+      await fs.writeFile(task.filePath, lines.join('\n'), 'utf-8');
+      
+      // Reload tasks and update view
+      await this.loadTasks();
+      this.sendTasksUpdate();
+      
+      // Refresh hashtags tree
+      vscode.commands.executeCommand('obsidianManager.refreshHashtags');
+      
+    } catch (error) {
+      vscode.window.showErrorMessage(`Error editing tags: ${error}`);
+    }
+  }
+  
+  private extractHashtags(text: string): string[] {
+    const hashtagRegex = /#[a-zA-Z0-9_]+/g;
+    const matches = text.match(hashtagRegex);
+    return matches || [];
   }
 
   private updateWebview() {
@@ -733,6 +879,19 @@ export class TaskTableProvider {
       max-width: 150px;
       overflow-x: auto;
       white-space: nowrap;
+      cursor: pointer;
+      position: relative;
+    }
+    
+    .tags-cell:hover {
+      background-color: var(--vscode-list-hoverBackground);
+    }
+    
+    .tags-cell:empty:after {
+      content: 'Click to add tags...';
+      color: var(--vscode-descriptionForeground);
+      font-size: 11px;
+      font-style: italic;
     }
     
     .tags-cell::-webkit-scrollbar {
@@ -1084,6 +1243,21 @@ export class TaskTableProvider {
             currentSearchText = tagText;
             applyFilter();
           }
+        }
+      }
+      
+      // Click on tags cell to edit tags
+      if (e.target.classList.contains('tags-cell') && e.target.tagName === 'TD') {
+        const row = e.target.closest('tr');
+        if (!row) return;
+        
+        const taskId = row.getAttribute('data-task-id');
+        
+        if (taskId) {
+          vscode.postMessage({
+            command: 'editTags',
+            taskId: taskId
+          });
         }
       }
     });
