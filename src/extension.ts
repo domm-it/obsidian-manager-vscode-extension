@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { ObsidianTreeProvider } from './obsidianTree';
 import { TaskTableProvider } from './taskTableProvider';
+import { HashtagTreeProvider } from './hashtagTree';
 import * as path from 'path';
 import { promises as fs } from 'fs';
 import * as os from 'os';
@@ -824,17 +825,20 @@ export async function activate(context: vscode.ExtensionContext) {
       const pattern = new vscode.RelativePattern(currentVaultPath, '**/*.md');
       fileWatcher = vscode.workspace.createFileSystemWatcher(pattern);
       
-      // Refresh calendar when files are created, changed, or deleted
+      // Refresh calendar and hashtags when files are created, changed, or deleted
       fileWatcher.onDidCreate(() => {
         vscode.commands.executeCommand('obsidianManager.refreshCalendar');
+        vscode.commands.executeCommand('obsidianManager.refreshHashtags');
       });
       
       fileWatcher.onDidChange(() => {
         vscode.commands.executeCommand('obsidianManager.refreshCalendar');
+        vscode.commands.executeCommand('obsidianManager.refreshHashtags');
       });
       
       fileWatcher.onDidDelete(() => {
         vscode.commands.executeCommand('obsidianManager.refreshCalendar');
+        vscode.commands.executeCommand('obsidianManager.refreshHashtags');
       });
       
       context.subscriptions.push(fileWatcher);
@@ -853,6 +857,11 @@ export async function activate(context: vscode.ExtensionContext) {
   const dndController = new ObsidianDragAndDropController(async () => { try { await provider.refreshAll(); } catch (e) { provider.refresh(); } });
   let treeView = vscode.window.createTreeView('obsidianFiles', { treeDataProvider: provider, dragAndDropController: dndController });
   context.subscriptions.push(treeView);
+
+  // Register hashtag tree provider
+  const hashtagProvider = new HashtagTreeProvider(context);
+  const hashtagTreeView = vscode.window.createTreeView('obsidianHashtags', { treeDataProvider: hashtagProvider });
+  context.subscriptions.push(hashtagTreeView);
 
 
 
@@ -2503,8 +2512,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Task Table Provider
   const taskTableProvider = new TaskTableProvider(context);
-  const showTaskTableCmd = vscode.commands.registerCommand('obsidianManager.showTaskTable', async (filterDate?: string, filterProject?: string) => {
-    await taskTableProvider.show(filterDate, filterProject);
+  const showTaskTableCmd = vscode.commands.registerCommand('obsidianManager.showTaskTable', async (filterDate?: string, filterProject?: string, filterHashtag?: string) => {
+    await taskTableProvider.show(filterDate, filterProject, filterHashtag);
   });
   context.subscriptions.push(showTaskTableCmd);
 
@@ -2525,6 +2534,12 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   });
   context.subscriptions.push(showTaskTableForProjectCmd);
+
+  // Refresh hashtags command
+  const refreshHashtagsCmd = vscode.commands.registerCommand('obsidianManager.refreshHashtags', async () => {
+    hashtagProvider.refresh();
+  });
+  context.subscriptions.push(refreshHashtagsCmd);
 }
 
 export function deactivate() {}

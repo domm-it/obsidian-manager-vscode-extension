@@ -20,7 +20,7 @@ export class TaskTableProvider {
 
   constructor(private context: vscode.ExtensionContext) {}
 
-  public async show(filterDate?: string, filterProject?: string) {
+  public async show(filterDate?: string, filterProject?: string, filterHashtag?: string) {
     // Get vault path from configuration
     const cfg = vscode.workspace.getConfiguration('obsidianManager');
     this.vaultPath = (cfg.get<string>('vault') || '').trim();
@@ -97,8 +97,8 @@ export class TaskTableProvider {
     this.updateWebview();
     
     // Apply initial filters if provided
-    if (filterDate || filterProject) {
-      this.sendTasksUpdate(undefined, filterDate, filterProject);
+    if (filterDate || filterProject || filterHashtag) {
+      this.sendTasksUpdate(undefined, filterDate, filterProject, filterHashtag);
     }
   }
 
@@ -374,7 +374,7 @@ export class TaskTableProvider {
     this.panel.webview.html = this.getWebviewContent();
   }
 
-  private sendTasksUpdate(focusTaskId?: string, filterDate?: string, filterProject?: string) {
+  private sendTasksUpdate(focusTaskId?: string, filterDate?: string, filterProject?: string, filterHashtag?: string) {
     if (!this.panel) {
       return;
     }
@@ -386,7 +386,8 @@ export class TaskTableProvider {
       projects: [...new Set(this.tasks.map(t => t.project))].sort(),
       focusTaskId: focusTaskId,
       filterDate: filterDate,
-      filterProject: filterProject
+      filterProject: filterProject,
+      filterHashtag: filterHashtag
     });
   }
 
@@ -417,7 +418,7 @@ export class TaskTableProvider {
     
     // Helper function to extract hashtags from text
     const extractTags = (text: string): string[] => {
-      const hashtagRegex = /#[\w]+/g;
+      const hashtagRegex = /#[a-zA-Z0-9_]+/g;
       const matches = text.match(hashtagRegex);
       return matches || [];
     };
@@ -940,9 +941,17 @@ export class TaskTableProvider {
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     
+    // Function to escape HTML
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+    
     // Function to extract hashtags from text
     function extractTags(text) {
-      const hashtagRegex = /#[\w]+/g;
+      if (!text) return [];
+      const hashtagRegex = /#[a-zA-Z0-9_]+/g;
       const matches = text.match(hashtagRegex);
       return matches || [];
     }
@@ -1083,7 +1092,11 @@ export class TaskTableProvider {
       const tbody = document.querySelector('#tasksTable tbody');
       if (!tbody) return;
       
-      tbody.innerHTML = tasks.map((task, index) => \`
+      tbody.innerHTML = tasks.map((task, index) => {
+        const tags = extractTags(task.task);
+        const tagsHtml = tags.map(tag => '<span class="tag">' + escapeHtml(tag) + '</span>').join('');
+        
+        return \`
         <tr data-task-id="\${task.id}" data-project="\${task.project}" data-filepath="\${task.filePath}" data-line-number="\${task.lineNumber}">
           <td class="status-cell">
             <input 
@@ -1104,7 +1117,7 @@ export class TaskTableProvider {
               />
             </div>
           </td>
-          <td class="tags-cell">\${extractTags(task.task).map(tag => '<span class="tag">' + tag + '</span>').join('')}</td>
+          <td class="tags-cell">\${tagsHtml}</td>
           <td class="insert-cell">
             <span class="codicon codicon-add add-icon" title="Add task after"></span>
           </td>
@@ -1112,7 +1125,8 @@ export class TaskTableProvider {
             <span class="codicon codicon-trash delete-icon" title="Delete task"></span>
           </td>
         </tr>
-      \`).join('');
+        \`;
+      }).join('');
       
       // Reapply sort FIRST
       if (currentSort.column) {
@@ -1286,6 +1300,16 @@ export class TaskTableProvider {
           const projectSelect = document.getElementById('projectFilter');
           if (projectSelect) {
             projectSelect.value = message.filterProject;
+          }
+          applyFilter();
+        }
+        
+        // Apply hashtag filter if provided
+        if (message.filterHashtag) {
+          currentSearchText = message.filterHashtag;
+          const searchInput = document.getElementById('searchInput');
+          if (searchInput) {
+            searchInput.value = message.filterHashtag;
           }
           applyFilter();
         }
