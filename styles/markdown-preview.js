@@ -5,6 +5,7 @@
     // Multiple strategies to catch content changes
     let debounceTimeout;
     let lastContentCheck = '';
+    let isProcessing = false; // Flag to prevent infinite loops
     
     // Safety check - exit early if we're in an unsafe context
     if (!window || !document || !document.body) {
@@ -19,13 +20,6 @@
         });
     } catch (e) {
         // If we can't add error listener, continue without it
-    }
-
-    // Add enhancements when DOM is ready
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initializeMarkdownEnhancements);
-    } else {
-        initializeMarkdownEnhancements();
     }
 
     /*================================================================
@@ -47,6 +41,10 @@
 
         function checkForContentChanges() {
         try {
+            if (isProcessing) {
+                return; // Skip if already processing
+            }
+            
             const currentContent = document.body.innerHTML;
             if (currentContent !== lastContentCheck) {
                 lastContentCheck = currentContent;
@@ -62,7 +60,7 @@
                     } catch (e) {
                         console.warn('Error in checkForContentChanges:', e);
                     }
-                }, 500);
+                }, 1000); // Increased to 1 second to reduce flickering
             }
         } catch (e) {
             console.warn('Error in checkForContentChanges:', e);
@@ -108,7 +106,16 @@
     // region - INIT
     ================================================================*/
     function initializeMarkdownEnhancements() {
+        if (isProcessing) {
+            return; // Prevent re-entry
+        }
+        
         try {
+            isProcessing = true;
+            
+            // Temporarily disconnect observer to prevent infinite loops
+            observer.disconnect();
+            
             // Re-create all copyButtons
             const copyButtons = document.querySelectorAll('.copy-button');
             copyButtons.forEach(button => {
@@ -127,6 +134,20 @@
 
         } catch (e) {
             console.warn('Error in initializeMarkdownEnhancements:', e);
+        } finally {
+            isProcessing = false;
+            
+            // Reconnect observer after a short delay
+            setTimeout(() => {
+                if (document && document.body) {
+                    observer.observe(document.body, {
+                        childList: true,
+                        subtree: true,
+                        attributes: false,
+                        characterData: false
+                    });
+                }
+            }, 100);
         }
     }
 
@@ -141,6 +162,10 @@
                 NodeFilter.SHOW_TEXT,
                 {
                     acceptNode: function(node) {
+                        // Skip if parent is already marked as processed
+                        if (node.parentElement && node.parentElement.hasAttribute('data-hashtag-processed')) {
+                            return NodeFilter.FILTER_REJECT;
+                        }
                         // Skip if already processed or inside code/pre
                         if (node.parentElement && 
                             (node.parentElement.classList.contains('hashtag') ||
@@ -199,6 +224,10 @@
                     // Replace original text node with fragment
                     if (textNode.parentNode) {
                         textNode.parentNode.replaceChild(fragment, textNode);
+                        // Mark parent as processed to avoid re-processing
+                        if (textNode.parentNode.nodeType === Node.ELEMENT_NODE) {
+                            textNode.parentNode.setAttribute('data-hashtag-processed', 'true');
+                        }
                     }
                 }
             });
@@ -210,80 +239,137 @@
     /*================================================================
     // region - TASK CHECKBOXES
     ================================================================*/
+    let checkboxServerInitialized = false;
+    let checkboxServerPort = null;
+    let checkboxServerNonce = null;
+    let checkboxSourceFile = null;
+    let isSavingCheckbox = false; // Global flag to prevent concurrent saves
+    
     function enhanceTaskCheckboxes() {
         try {
-            // Get server data from the injected div
-            const serverDataDiv = document.getElementById('mdCheckboxServerData');
-            if (!serverDataDiv) {
-                return;
+            // Get server data from the injected div (only once)
+            if (!checkboxServerInitialized) {
+                const serverDataDiv = document.getElementById('mdCheckboxServerData');
+                if (!serverDataDiv) {
+                    return;
+                }
+                
+                checkboxServerPort = serverDataDiv.getAttribute('data-port');
+                checkboxServerNonce = serverDataDiv.getAttribute('data-nonce');
+                
+                if (!checkboxServerPort || !checkboxServerNonce) {
+                    return;
+                }
+                
+                // Get the source file from the base tag
+                const baseTag = document.querySelector('base');
+                if (baseTag && baseTag.href) {
+                    checkboxSourceFile = baseTag.href;
+                }
+                
+                if (!checkboxSourceFile) {
+                    return;
+                }
+                
+                // Use event delegation - single listener on document for all checkboxes
+                document.addEventListener('change', handleCheckboxChange, true);
+                
+                checkboxServerInitialized = true;
             }
             
-            const port = serverDataDiv.getAttribute('data-port');
-            const nonce = serverDataDiv.getAttribute('data-nonce');
-            
-            if (!port || !nonce) {
-                return;
-            }
-            
-            // Get the source file from the base tag
-            const baseTag = document.querySelector('base');
-            let source = '';
-            if (baseTag && baseTag.href) {
-                source = baseTag.href;
-            }
-            
-            if (!source) {
-                return;
-            }
-            
-            // Find all checkbox inputs - try multiple selectors
-            let checkboxes = document.querySelectorAll('input[type="checkbox"].task-list-item-checkbox');
+            // Find all checkbox inputs and make them interactive
+            let checkboxes = document.querySelectorAll('input[type="checkbox"].task-list-item-checkbox:not([data-enhanced])');
             
             if (checkboxes.length === 0) {
-                checkboxes = document.querySelectorAll('.task-list-item input[type="checkbox"]');
+                checkboxes = document.querySelectorAll('.task-list-item input[type="checkbox"]:not([data-enhanced])');
             }
             
             if (checkboxes.length === 0) {
-                checkboxes = document.querySelectorAll('.task-list input[type="checkbox"]');
+                checkboxes = document.querySelectorAll('.task-list input[type="checkbox"]:not([data-enhanced])');
             }
             
-            checkboxes.forEach((checkbox, index) => {
-                // Make checkbox enabled (not disabled)
+            checkboxes.forEach((checkbox) => {
+                // Mark as enhanced and enable
+                checkbox.setAttribute('data-enhanced', 'true');
                 checkbox.removeAttribute('disabled');
                 checkbox.style.cursor = 'pointer';
-                
-                // Get the line number from the data attribute
-                const listItem = checkbox.closest('li.task-list-item');
-                if (!listItem) {
-                    return;
-                }
-                
-                // Get line number from the li element's data-line attribute
-                const lineNumber = listItem.getAttribute('data-line');
-                if (!lineNumber) {
-                    return;
-                }
-                
-                // Add click handler for interactivity
-                checkbox.addEventListener('change', async (e) => {
-                    e.stopPropagation();
-                    
-                    const checked = checkbox.checked;
-                    
-                    // Send request to server to update the file
-                    try {
-                        const url = `http://localhost:${port}/checkbox/mark?source=${encodeURIComponent(source)}&line=${lineNumber}&checked=${checked}&nonce=${encodeURIComponent(nonce)}`;
-                        
-                        // Use Image to send request and avoid CORS issues
-                        const img = new Image();
-                        img.src = url;
-                    } catch (error) {
-                        // Silent fail
-                    }
-                });
             });
         } catch (e) {
             // Silent fail
+        }
+    }
+    
+    function handleCheckboxChange(e) {
+        const checkbox = e.target;
+        
+        // Check if this is a task list checkbox
+        if (checkbox.type !== 'checkbox') {
+            return;
+        }
+        
+        const listItem = checkbox.closest('li.task-list-item');
+        if (!listItem) {
+            return;
+        }
+        
+        // Get line number
+        const lineNumber = listItem.getAttribute('data-line');
+        if (!lineNumber) {
+            return;
+        }
+        
+        // If already saving, prevent this change
+        if (isSavingCheckbox) {
+            e.preventDefault();
+            e.stopPropagation();
+            checkbox.checked = !checkbox.checked; // Revert the change
+            return;
+        }
+        
+        e.stopPropagation();
+        
+        const checked = checkbox.checked;
+        
+        // Set saving flag and disable ALL checkboxes
+        isSavingCheckbox = true;
+        const allCheckboxes = document.querySelectorAll('input[type="checkbox"]');
+        allCheckboxes.forEach(cb => {
+            cb.disabled = true;
+            cb.style.opacity = '0.5';
+        });
+        
+        try {
+            const url = `http://localhost:${checkboxServerPort}/checkbox/mark?source=${encodeURIComponent(checkboxSourceFile)}&line=${lineNumber}&checked=${checked}&nonce=${encodeURIComponent(checkboxServerNonce)}`;
+            
+            // Use Image to bypass CSP
+            const img = new Image();
+            
+            const reEnableCheckboxes = () => {
+                // Wait for file save and preview reload
+                setTimeout(() => {
+                    isSavingCheckbox = false;
+                    const allCheckboxes = document.querySelectorAll('input[type="checkbox"]');
+                    allCheckboxes.forEach(cb => {
+                        cb.disabled = false;
+                        cb.style.opacity = '1';
+                    });
+                }, 300);
+            };
+            
+            img.onload = reEnableCheckboxes;
+            img.onerror = reEnableCheckboxes;
+            
+            img.src = url;
+            
+        } catch (error) {
+            // Re-enable on error
+            isSavingCheckbox = false;
+            const allCheckboxes = document.querySelectorAll('input[type="checkbox"]');
+            allCheckboxes.forEach(cb => {
+                cb.disabled = false;
+                cb.style.opacity = '1';
+            });
+            checkbox.checked = !checked;
         }
     }
 
@@ -291,17 +377,16 @@
     // region - ADD COPY TO SHORT-CODE
     ================================================================*/
     function addCopyToShortCode() {
-        if (document.querySelector('.short-code-container')) {
-            return;
-        }
-
-        const codeElements = Array.from(document.querySelectorAll('code')).filter(
-            code => !code.closest('pre')
+        // Find code elements that haven't been wrapped yet
+        const codeElements = Array.from(document.querySelectorAll('code:not([data-copy-enhanced])')).filter(
+            code => !code.closest('pre') && !code.closest('.short-code-container')
         );
-        if (!codeElements) {
+        if (!codeElements || codeElements.length === 0) {
             return;
         }
         codeElements.forEach((codeElement) => {
+            // Mark as enhanced before wrapping
+            codeElement.setAttribute('data-copy-enhanced', 'true');
             // Create wrapper span
             const wrapper = document.createElement('span');
             wrapper.className = 'short-code-container';
@@ -481,6 +566,17 @@
         } catch (err) {
             reject(err);
         }
+    }
+
+    /*================================================================
+    // region - INITIALIZATION
+    ================================================================*/
+    // Add enhancements when DOM is ready
+    // This must be at the end after all functions are defined
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeMarkdownEnhancements);
+    } else {
+        initializeMarkdownEnhancements();
     }
 
 })();

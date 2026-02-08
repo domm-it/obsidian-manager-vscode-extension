@@ -22,7 +22,7 @@ export function createCheckboxServer() {
 // Empty 1x1 transparent PNG image to return as response
 const emptyImage = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABAQAAAAA3bvkkAAAACklEQVR4AWNgAAAAAgABc3UBGAAAAABJRU5ErkJggg==';
 
-const handleCheckboxMark = (serverNonce: string) => (req: Request, res: Response) => {
+const handleCheckboxMark = (serverNonce: string) => async (req: Request, res: Response) => {
     if (!validateNonce(req.query.nonce as string, serverNonce)) {
         res.status(403).send('Forbidden');
         return;
@@ -32,7 +32,7 @@ const handleCheckboxMark = (serverNonce: string) => (req: Request, res: Response
     const line = parseInt(req.query.line as string);
     const checked = req.query.checked === 'true';
 
-    markCheckbox(source, line, checked);
+    await markCheckbox(source, line, checked);
 
     res.contentType('image/png');
     res.send(Buffer.from(emptyImage, 'base64'));
@@ -48,7 +48,6 @@ function validateNonce(nonce: string, serverNonce: string) {
 async function markCheckbox(source: string, line: number, checked: boolean) {
     try {
         // Convert webview URL to file:// URI
-        // Format: https://file+.vscode-resource.vscode-cdn.net/REAL_PATH -> file://REAL_PATH
         let filePath = source;
         if (source.includes('vscode-resource.vscode-cdn.net')) {
             const match = source.match(/vscode-resource\.vscode-cdn\.net(.+)$/);
@@ -83,9 +82,11 @@ async function markCheckbox(source: string, line: number, checked: boolean) {
                 preserveFocus: true,
                 viewColumn: vscode.ViewColumn.Active
             });
+            // Give a moment for the editor to be ready
+            await new Promise(resolve => setTimeout(resolve, 10));
         }
 
-        // Use editor.edit() for more reliable editing
+        // Use editor.edit() for reliable editing
         const editSuccess = await editor.edit(editBuilder => {
             const checkRange = new vscode.Range(
                 line,
@@ -94,13 +95,35 @@ async function markCheckbox(source: string, line: number, checked: boolean) {
                 checkboxColumn + 2
             );
             editBuilder.replace(checkRange, newMark);
+        }, {
+            undoStopBefore: true,
+            undoStopAfter: true
         });
 
         if (editSuccess) {
-            await document.save();
+            // Save with retry logic
+            let saveAttempts = 0;
+            const maxAttempts = 3;
+            
+            while (saveAttempts < maxAttempts) {
+                try {
+                    const saved = await document.save();
+                    if (saved) {
+                        break;
+                    }
+                    saveAttempts++;
+                    if (saveAttempts < maxAttempts) {
+                        await new Promise(resolve => setTimeout(resolve, 50));
+                    }
+                } catch (err) {
+                    saveAttempts++;
+                    if (saveAttempts < maxAttempts) {
+                        await new Promise(resolve => setTimeout(resolve, 50));
+                    }
+                }
+            }
         }
-        
     } catch (error) {
-        // Silent fail
+        // Silent failure
     }
 }
