@@ -20,7 +20,7 @@ export class TaskTableProvider {
 
   constructor(private context: vscode.ExtensionContext) {}
 
-  public async show() {
+  public async show(filterDate?: string) {
     // Get vault path from configuration
     const cfg = vscode.workspace.getConfiguration('obsidianManager');
     this.vaultPath = (cfg.get<string>('vault') || '').trim();
@@ -101,6 +101,11 @@ export class TaskTableProvider {
     // Load tasks and update webview
     await this.loadTasks();
     this.updateWebview();
+    
+    // Apply initial filter if provided
+    if (filterDate) {
+      this.sendTasksUpdate(undefined, filterDate);
+    }
   }
 
   private async loadTasks() {
@@ -329,7 +334,7 @@ export class TaskTableProvider {
     this.panel.webview.html = this.getWebviewContent();
   }
 
-  private sendTasksUpdate(focusTaskId?: string) {
+  private sendTasksUpdate(focusTaskId?: string, filterDate?: string) {
     if (!this.panel) {
       return;
     }
@@ -339,7 +344,8 @@ export class TaskTableProvider {
       command: 'updateTasks',
       tasks: this.tasks,
       projects: [...new Set(this.tasks.map(t => t.project))].sort(),
-      focusTaskId: focusTaskId
+      focusTaskId: focusTaskId,
+      filterDate: filterDate
     });
   }
 
@@ -1179,6 +1185,16 @@ export class TaskTableProvider {
       if (message.command === 'updateTasks') {
         rebuildTable(message.tasks);
         updateProjectFilter(message.projects);
+        
+        // Apply date filter if provided
+        if (message.filterDate) {
+          currentDateFilter = message.filterDate;
+          const dateInput = document.getElementById('dateFilter');
+          if (dateInput) {
+            dateInput.value = message.filterDate;
+          }
+          applyFilter();
+        }
         
         // Focus on new task input if specified
         if (message.focusTaskId) {

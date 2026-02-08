@@ -1175,10 +1175,17 @@ export async function activate(context: vscode.ExtensionContext) {
           
           const existingFilePaths = message.existingFilePaths;
           
-          // Create quick pick items - always start with "Create new file" option
+          // Create quick pick items
           const quickPickItems: vscode.QuickPickItem[] = [];
           
-          // Add "Create new file" as first option
+          // Add "Open Tasks Table" as first option
+          quickPickItems.push({
+            label: '$(table) Open Tasks Table for this date',
+            description: 'Show all tasks for ' + message.date,
+            detail: 'OPEN_TASK_TABLE'
+          });
+          
+          // Add "Create new file" as second option
           quickPickItems.push({
             label: 'Create new file in root vault',
             description: 'Create in root vault folder',
@@ -1213,6 +1220,12 @@ export async function activate(context: vscode.ExtensionContext) {
           
           if (!selectedItem || selectedItem.detail === '__SEPARATOR__') {
             return; // User cancelled or selected separator
+          }
+          
+          if (selectedItem.detail === 'OPEN_TASK_TABLE') {
+            // Open Task Table filtered by this date
+            await vscode.commands.executeCommand('obsidianManager.showTaskTable', message.date);
+            return;
           }
           
           if (selectedItem.detail === 'NEW_FILE') {
@@ -2490,8 +2503,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Task Table Provider
   const taskTableProvider = new TaskTableProvider(context);
-  const showTaskTableCmd = vscode.commands.registerCommand('obsidianManager.showTaskTable', async () => {
-    await taskTableProvider.show();
+  const showTaskTableCmd = vscode.commands.registerCommand('obsidianManager.showTaskTable', async (filterDate?: string) => {
+    await taskTableProvider.show(filterDate);
   });
   context.subscriptions.push(showTaskTableCmd);
 }
