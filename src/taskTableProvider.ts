@@ -71,6 +71,20 @@ export class TaskTableProvider {
                 await this.openFileAtLine(message.filePath, message.lineNumber);
               }
               break;
+            case 'deleteTask':
+              if (message.taskId) {
+                console.log('Delete task:', message.taskId);
+                const answer = await vscode.window.showWarningMessage(
+                  'Are you sure you want to delete this task?',
+                  { modal: true },
+                  'Delete',
+                  'Cancel'
+                );
+                if (answer === 'Delete') {
+                  await this.deleteTask(message.taskId);
+                }
+              }
+              break;
           }
         },
         undefined,
@@ -250,6 +264,30 @@ export class TaskTableProvider {
     }
   }
 
+  private async deleteTask(taskId: string) {
+    const task = this.tasks.find(t => t.id === taskId);
+    if (!task) {
+      return;
+    }
+
+    try {
+      const content = await fs.readFile(task.filePath, 'utf-8');
+      const lines = content.split('\n');
+      
+      // Replace the line with empty string (leaves blank line)
+      lines[task.lineNumber] = '';
+      
+      await fs.writeFile(task.filePath, lines.join('\n'), 'utf-8');
+      
+      // Reload tasks and send updated data without full refresh
+      await this.loadTasks();
+      this.sendTasksUpdate();
+      
+    } catch (error) {
+      vscode.window.showErrorMessage(`Error deleting task: ${error}`);
+    }
+  }
+
   private updateWebview() {
     if (!this.panel) {
       return;
@@ -299,12 +337,24 @@ export class TaskTableProvider {
     // Generate a nonce for CSP
     const nonce = this.getNonce();
     
+    if (!this.panel) {
+      return '';
+    }
+    
+    // Get Codicon font URI
+    const codiconUri = this.panel.webview.asWebviewUri(
+      vscode.Uri.joinPath(this.context.extensionUri, 'node_modules', '@vscode/codicons', 'dist', 'codicon.css')
+    );
+    
+    const cspSource = this.panel.webview.cspSource;
+    
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' ${cspSource}; font-src ${cspSource}; script-src 'nonce-${nonce}';">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="${codiconUri}" rel="stylesheet" />
   <title>Obsidian Tasks Table</title>
   <style>
     * {
@@ -543,7 +593,6 @@ export class TaskTableProvider {
     .open-file-icon {
       cursor: pointer;
       color: var(--vscode-textLink-foreground);
-      font-size: 14px;
       opacity: 0.6;
       flex-shrink: 0;
     }
@@ -553,8 +602,21 @@ export class TaskTableProvider {
     }
     
     .actions-cell {
-      width: 80px;
+      width: 40px;
+      min-width: 40px;
       text-align: center;
+      padding: 4px !important;
+    }
+    
+    .delete-icon {
+      cursor: pointer;
+      color: var(--vscode-errorForeground);
+      opacity: 0.8;
+      font-size: 16px !important;
+    }
+    
+    .delete-icon:hover {
+      opacity: 1;
     }
     
     input[type="checkbox"] {
@@ -652,6 +714,7 @@ export class TaskTableProvider {
           <th class="date-cell sortable" data-column="date">DATE</th>
           <th class="project-cell sortable" data-column="project">PROJECT</th>
           <th class="task-cell">TASK</th>
+          <th class="actions-cell"></th>
         </tr>
       </thead>
       <tbody>
@@ -669,13 +732,16 @@ export class TaskTableProvider {
             <td class="project-cell">${task.project}</td>
             <td class="task-cell">
               <div class="task-cell-content">
-                <span class="open-file-icon" title="Open file">↗</span>
+                <span class="codicon codicon-link-external open-file-icon" title="Open file"></span>
                 <input 
                   type="text" 
                   class="task-input"
                   value="${task.task.replace(/"/g, '&quot;')}"
                 />
               </div>
+            </td>
+            <td class="actions-cell">
+              <span class="codicon codicon-trash delete-icon" title="Delete task"></span>
             </td>
           </tr>
         `).join('')}
@@ -752,6 +818,21 @@ export class TaskTableProvider {
           });
         }
       }
+      
+      // Click on delete icon
+      if (e.target.classList.contains('delete-icon')) {
+        const row = e.target.closest('tr');
+        if (!row) return;
+        
+        const taskId = row.getAttribute('data-task-id');
+        
+        if (taskId) {
+          vscode.postMessage({
+            command: 'deleteTask',
+            taskId: taskId
+          });
+        }
+      }
     });
     
     function rebuildTable(tasks) {
@@ -771,13 +852,16 @@ export class TaskTableProvider {
           <td class="project-cell">\${task.project}</td>
           <td class="task-cell">
             <div class="task-cell-content">
-              <span class="open-file-icon" title="Open file">↗</span>
+              <span class="codicon codicon-link-external open-file-icon" title="Open file"></span>
               <input 
                 type="text" 
                 class="task-input"
                 value="\${task.task.replace(/"/g, '&quot;')}"
               />
             </div>
+          </td>
+          <td class="actions-cell">
+            <span class="codicon codicon-trash delete-icon" title="Delete task"></span>
           </td>
         </tr>
       \`).join('');
