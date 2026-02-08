@@ -51,36 +51,30 @@ export class TaskTableProvider {
       // Handle messages from the webview
       this.panel.webview.onDidReceiveMessage(
         async (message) => {
-          console.log('Received message from webview:', message);
           switch (message.command) {
             case 'toggleStatus':
               if (message.taskId) {
-                console.log('Toggle status for task:', message.taskId);
                 await this.toggleTaskStatus(message.taskId);
               }
               break;
             case 'updateTask':
               if (message.taskId) {
-                console.log('Update task:', message.taskId, 'with text:', message.newText);
                 await this.updateTaskText(message.taskId, message.newText);
               }
               break;
             case 'openFile':
               if (message.filePath && message.lineNumber !== undefined) {
-                console.log('Open file:', message.filePath, 'at line:', message.lineNumber);
                 await this.openFileAtLine(message.filePath, message.lineNumber);
               }
               break;
             case 'addTaskAfter':
               if (message.taskId) {
-                console.log('Add task after:', message.taskId);
                 await this.addTaskAfter(message.taskId);
               }
               break;
 
             case 'deleteTask':
               if (message.taskId) {
-                console.log('Delete task:', message.taskId);
                 const answer = await vscode.window.showWarningMessage(
                   'Are you sure you want to delete this task?',
                   { modal: true },
@@ -864,8 +858,6 @@ export class TaskTableProvider {
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     
-    console.log('Script loaded');
-    
     // Preserve state - default sort by date descending
     let currentSort = { column: 'date', direction: 'desc' };
     let currentFilter = '';
@@ -1018,11 +1010,8 @@ export class TaskTableProvider {
         </tr>
       \`).join('');
       
-      console.log('rebuildTable: currentSort =', currentSort);
-      
       // Reapply sort FIRST
       if (currentSort.column) {
-        console.log('Applying sort:', currentSort.column, currentSort.direction);
         // Update UI to show current sort
         document.querySelectorAll('th.sortable').forEach(h => {
           h.classList.remove('sorted-asc', 'sorted-desc');
@@ -1030,17 +1019,11 @@ export class TaskTableProvider {
         const header = document.querySelector('th[data-column="' + currentSort.column + '"]');
         if (header) {
           header.classList.add('sorted-' + currentSort.direction);
-          console.log('Header found and class added');
-        } else {
-          console.log('Header NOT found!');
         }
         applySorting();
-      } else {
-        console.log('No currentSort.column - skipping sort');
       }
       
       // Then apply filter (after sorting)
-      console.log('Calling applyFilter from rebuildTable');
       applyFilter();
       
       // DON'T restore filter states here - will be done after updateProjectFilter
@@ -1062,7 +1045,6 @@ export class TaskTableProvider {
     }
     
     function applyFilter() {
-      console.log('applyFilter called with:', { currentFilter, currentDateFilter, currentHideCompleted, currentSearchText });
       const rows = document.querySelectorAll('#tasksTable tbody tr');
       const searchLower = currentSearchText.toLowerCase();
       let visibleCount = 0;
@@ -1098,17 +1080,13 @@ export class TaskTableProvider {
       if (taskCountEl) {
         taskCountEl.textContent = '(' + visibleCount + ')';
       }
-      console.log('applyFilter complete. Visible rows:', visibleCount);
     }
     
     function applySorting() {
       const tbody = document.querySelector('#tasksTable tbody');
       if (!tbody) return;
       
-      console.log('applySorting called');
-      
       const rows = Array.from(tbody.querySelectorAll('tr'));
-      console.log('Rows to sort:', rows.length);
       
       rows.sort((a, b) => {
         let aVal, bVal;
@@ -1149,14 +1127,7 @@ export class TaskTableProvider {
         return result;
       });
       
-      console.log('Sorting complete, first 3 rows:', rows.slice(0, 3).map(r => {
-        if (currentSort.column === 'date') return r.querySelector('.date-cell').textContent;
-        if (currentSort.column === 'project') return r.querySelector('.project-cell').textContent;
-        return '';
-      }));
-      
       rows.forEach(row => tbody.appendChild(row));
-      console.log('Rows appended to tbody');
     }
     
     function updateProjectFilter(projects) {
