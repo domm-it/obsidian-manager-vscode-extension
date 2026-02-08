@@ -256,14 +256,60 @@ export class TaskTableProvider {
 
   private async openFileAtLine(filePath: string, lineNumber: number) {
     try {
-      const doc = await vscode.workspace.openTextDocument(filePath);
-      const editor = await vscode.window.showTextDocument(doc);
+      const cfg = vscode.workspace.getConfiguration('obsidianManager');
+      const openMode = cfg.get<string>('taskTableOpenFileMode', 'edit');
       
-      // Move cursor to the specified line
-      const position = new vscode.Position(lineNumber, 0);
-      editor.selection = new vscode.Selection(position, position);
-      editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
+      const uri = vscode.Uri.file(filePath);
       
+      if (openMode === 'preview') {
+        // Open in markdown preview mode
+        await this.showMarkdownPreviewSafe(uri);
+      } else {
+        // Open in edit mode
+        const doc = await vscode.workspace.openTextDocument(uri);
+        const editor = await vscode.window.showTextDocument(doc, { preview: false });
+        
+        // Move cursor to the specified line
+        const position = new vscode.Position(lineNumber, 0);
+        editor.selection = new vscode.Selection(position, position);
+        editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
+      }
+    } catch (error) {
+      vscode.window.showErrorMessage(`Error opening file: ${error}`);
+    }
+  }
+  
+  private async showMarkdownPreviewSafe(uri: vscode.Uri): Promise<void> {
+    try {
+      // Preload document to ensure it's in VS Code's document cache
+      const document = await vscode.workspace.openTextDocument(uri);
+      
+      // Wait for document content to be available
+      let attempts = 0;
+      const maxAttempts = 3;
+      while (attempts < maxAttempts) {
+        if (document.getText().length > 0 || attempts === maxAttempts - 1) {
+          break;
+        }
+        const delay = 25 * Math.pow(2, attempts);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        attempts++;
+      }
+      
+      // Short delay to ensure document is fully processed
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      try {
+        // Try to show markdown preview
+        await vscode.commands.executeCommand('markdown.showPreview', uri);
+        
+        // Additional delay to let the preview render
+        await new Promise(resolve => setTimeout(resolve, 200));
+      } catch (previewError) {
+        // If preview fails, fall back to opening in edit mode
+        const doc = await vscode.workspace.openTextDocument(uri);
+        await vscode.window.showTextDocument(doc, { preview: false });
+      }
     } catch (error) {
       vscode.window.showErrorMessage(`Error opening file: ${error}`);
     }

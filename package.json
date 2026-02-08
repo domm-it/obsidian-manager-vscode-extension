@@ -523,6 +523,15 @@
           "default": "preview",
           "description": "How files should be opened: 'edit' mode for immediate editing or 'preview' mode for read-only viewing."
         },
+        "obsidianManager.taskTableOpenFileMode": {
+          "type": "string",
+          "enum": [
+            "edit",
+            "preview"
+          ],
+          "default": "edit",
+          "description": "How files should be opened from the Task Table: 'edit' mode for immediate editing or 'preview' mode for read-only viewing."
+        },
         "obsidianManager.newFileOpenMode": {
           "type": "string",
           "enum": [
