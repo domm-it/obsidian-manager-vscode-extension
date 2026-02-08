@@ -97,6 +97,14 @@ export class TaskTableProvider {
                 await this.removeTagFromTask(message.taskId, message.tag);
               }
               break;
+            
+            case 'selectFiles':
+              await this.selectFilesFilter(message.currentSelection || []);
+              break;
+            
+            case 'selectProjects':
+              await this.selectProjectsFilter(message.currentSelection || []);
+              break;
           }
         },
         undefined,
@@ -262,7 +270,7 @@ export class TaskTableProvider {
       this.sendTasksUpdate();
       
       // Refresh hashtags tree (task text might contain hashtags)
-      console.log('TaskTableProvider: Calling refreshHashtags after updateTaskText');
+      // Refresh hashtags to update count
       vscode.commands.executeCommand('obsidianManager.refreshHashtags');
       
     } catch (error) {
@@ -351,7 +359,7 @@ export class TaskTableProvider {
       this.sendTasksUpdate();
       
       // Refresh hashtags tree (deleted task might have had hashtags)
-      console.log('TaskTableProvider: Calling refreshHashtags after deleteTask');
+      // Refresh hashtags to update count
       vscode.commands.executeCommand('obsidianManager.refreshHashtags');
       
     } catch (error) {
@@ -513,7 +521,7 @@ export class TaskTableProvider {
       this.sendTasksUpdate();
       
       // Refresh hashtags tree
-      console.log('TaskTableProvider: Calling refreshHashtags after editTaskTags');
+      // Refresh hashtags to update count
       vscode.commands.executeCommand('obsidianManager.refreshHashtags');
       
     } catch (error) {
@@ -553,11 +561,101 @@ export class TaskTableProvider {
       this.sendTasksUpdate();
       
       // Refresh hashtags tree
-      console.log('TaskTableProvider: Calling refreshHashtags after removeTagFromTask');
+      // Refresh hashtags to update count
       vscode.commands.executeCommand('obsidianManager.refreshHashtags');
       
     } catch (error) {
       vscode.window.showErrorMessage(`Error removing tag: ${error}`);
+    }
+  }
+
+  private async selectFilesFilter(currentSelection: string[]): Promise<void> {
+    try {
+      // Get all unique files from tasks
+      const allFiles = [...new Set(this.tasks.map(t => path.basename(t.filePath)))].sort();
+      
+      if (allFiles.length === 0) {
+        vscode.window.showInformationMessage('No files found');
+        return;
+      }
+      
+      // Create QuickPick items
+      const items = allFiles.map(file => ({
+        label: file,
+        picked: currentSelection.includes(file)
+      }));
+      
+      const quickPick = vscode.window.createQuickPick();
+      quickPick.title = 'Select Files to Filter';
+      quickPick.placeholder = 'Select one or more files';
+      quickPick.canSelectMany = true;
+      quickPick.items = items;
+      quickPick.selectedItems = items.filter(item => item.picked);
+      
+      quickPick.onDidAccept(() => {
+        const selectedFiles = quickPick.selectedItems.map(item => item.label);
+        
+        // Send selected files back to webview
+        if (this.panel) {
+          this.panel.webview.postMessage({
+            command: 'filesSelected',
+            files: selectedFiles
+          });
+        }
+        
+        quickPick.hide();
+      });
+      
+      quickPick.onDidHide(() => quickPick.dispose());
+      quickPick.show();
+      
+    } catch (error) {
+      vscode.window.showErrorMessage(`Error selecting files: ${error}`);
+    }
+  }
+
+  private async selectProjectsFilter(currentSelection: string[]): Promise<void> {
+    try {
+      // Get all unique projects from tasks
+      const allProjects = [...new Set(this.tasks.map(t => t.project))].sort();
+      
+      if (allProjects.length === 0) {
+        vscode.window.showInformationMessage('No projects found');
+        return;
+      }
+      
+      // Create QuickPick items
+      const items = allProjects.map(project => ({
+        label: project,
+        picked: currentSelection.includes(project)
+      }));
+      
+      const quickPick = vscode.window.createQuickPick();
+      quickPick.title = 'Select Projects to Filter';
+      quickPick.placeholder = 'Select one or more projects';
+      quickPick.canSelectMany = true;
+      quickPick.items = items;
+      quickPick.selectedItems = items.filter(item => item.picked);
+      
+      quickPick.onDidAccept(() => {
+        const selectedProjects = quickPick.selectedItems.map(item => item.label);
+        
+        // Send selected projects back to webview
+        if (this.panel) {
+          this.panel.webview.postMessage({
+            command: 'projectsSelected',
+            projects: selectedProjects
+          });
+        }
+        
+        quickPick.hide();
+      });
+      
+      quickPick.onDidHide(() => quickPick.dispose());
+      quickPick.show();
+      
+    } catch (error) {
+      vscode.window.showErrorMessage(`Error selecting projects: ${error}`);
     }
   }
 
@@ -605,6 +703,9 @@ export class TaskTableProvider {
     
     // Get unique projects for filter dropdown
     const projects = [...new Set(tasks.map(t => t.project))].sort();
+    
+    // Get unique files for filter dropdown (show just basename)
+    const files = [...new Set(tasks.map(t => path.basename(t.filePath)))].sort();
     
     // Get hideCompleted default from settings
     const hideCompletedDefault = this.getHideCompletedDefault();
@@ -682,11 +783,21 @@ export class TaskTableProvider {
       font-size: 14px;
       margin-left: 12px;
     }
+
+    .filters-container {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
     
     .filters {
       display: flex;
       gap: 20px;
       align-items: center;
+    }
+    
+    .filters-secondary {
+      margin-top: 12px;
     }
     
     .filter-group {
@@ -1088,35 +1199,43 @@ export class TaskTableProvider {
     <div>
       <h1>Tasks <span class="task-count" id="taskCount"></span></h1>
     </div>
-    <div class="filters">
-      <div class="filter-group">
-        <label for="searchInput">Search:</label>
-        <fieldset class="input-with-clear">
-          <input type="text" id="searchInput" placeholder="Filter by task, project, date or #hashtag..." />
-          <button class="clear-btn" id="clearSearch" title="Clear search">×</button>
-        </fieldset>
+    <div class="filters-conteiner">
+      <div class="filters">
+        <div class="filter-group">
+          <label for="searchInput">Search:</label>
+          <fieldset class="input-with-clear">
+            <input type="text" id="searchInput" placeholder="Filter by task, project, date or #hashtag..." />
+            <button class="clear-btn" id="clearSearch" title="Clear search">×</button>
+          </fieldset>
+        </div>
+        <div class="filter-group">
+          <label for="dateFilter">Date:</label>
+          <fieldset class="input-with-clear">
+            <input type="date" id="dateFilter" />
+            <button class="clear-btn" id="clearDate" title="Clear date filter">×</button>
+          </fieldset>
+        </div>
+        <div class="filter-group toggle-container">
+          <input type="checkbox" id="hideCompleted" ${hideCompletedDefault ? 'checked' : ''} />
+          <label for="hideCompleted" class="toggle-switch"></label>
+          <label for="hideCompleted" style="cursor: pointer;">Hide completed</label>
+        </div>
       </div>
-      <div class="filter-group">
-        <label for="dateFilter">Date:</label>
-        <fieldset class="input-with-clear">
-          <input type="date" id="dateFilter" />
-          <button class="clear-btn" id="clearDate" title="Clear date filter">×</button>
-        </fieldset>
-      </div>
-      <div class="filter-group">
-        <label for="projectFilter">Project:</label>
-        <fieldset class="input-with-clear">
-          <select id="projectFilter">
-            <option value="">All Projects</option>
-            ${projects.map(p => `<option value="${p}">${p}</option>`).join('')}
-          </select>
-          <button class="clear-btn" id="clearProject" title="Clear project filter">×</button>
-        </fieldset>
-      </div>
-      <div class="filter-group toggle-container">
-        <input type="checkbox" id="hideCompleted" ${hideCompletedDefault ? 'checked' : ''} />
-        <label for="hideCompleted" class="toggle-switch"></label>
-        <label for="hideCompleted" style="cursor: pointer;">Hide completed</label>
+      <div class="filters filters-secondary">
+        <div class="filter-group">
+          <label>Projects:</label>
+          <fieldset class="input-with-clear">
+            <input type="text" id="projectFilterDisplay" readonly placeholder="All Projects" style="cursor: pointer; background-color: var(--vscode-input-background);" />
+            <button class="clear-btn" id="clearProject" title="Clear project filter">×</button>
+          </fieldset>
+        </div>
+        <div class="filter-group">
+          <label>Files:</label>
+          <fieldset class="input-with-clear">
+            <input type="text" id="fileFilterDisplay" readonly placeholder="All Files" style="cursor: pointer; background-color: var(--vscode-input-background);" />
+            <button class="clear-btn" id="clearFile" title="Clear file filter">×</button>
+          </fieldset>
+        </div>
       </div>
     </div>
   </div>
@@ -1140,7 +1259,7 @@ export class TaskTableProvider {
       </thead>
       <tbody>
         ${tasks.map((task, index) => `
-          <tr data-task-id="${escapeHtml(task.id)}" data-index="${index}" data-project="${escapeHtml(task.project)}" data-filepath="${escapeHtml(task.filePath)}" data-line-number="${task.lineNumber}">
+          <tr data-task-id="${escapeHtml(task.id)}" data-index="${index}" data-project="${escapeHtml(task.project)}" data-file="${escapeHtml(path.basename(task.filePath))}" data-filepath="${escapeHtml(task.filePath)}" data-line-number="${task.lineNumber}">
 
             <td class="status-cell">
               <input 
@@ -1194,10 +1313,11 @@ export class TaskTableProvider {
     
     // Preserve state - default sort by date descending
     let currentSort = { column: 'date', direction: 'desc' };
-    let currentFilter = '';
+    let currentFilter = []; // Array of selected projects
     let currentHideCompleted = ${hideCompletedDefault};
     let currentSearchText = '';
     let currentDateFilter = '';
+    let currentFileFilter = []; // Array of selected files
     
     // Event delegation for checkboxes
     document.addEventListener('change', function(e) {
@@ -1375,9 +1495,10 @@ export class TaskTableProvider {
       tbody.innerHTML = tasks.map((task, index) => {
         const tags = extractTags(task.task);
         const tagsHtml = tags.map(tag => '<span class="tag" data-tag="' + escapeHtml(tag) + '">' + escapeHtml(tag) + '<span class="tag-remove">×</span></span>').join('');
+        const filename = task.filePath.split('/').pop() || task.filePath.split('\\\\').pop() || task.filePath;
         
         return \`
-        <tr data-task-id="\${task.id}" data-project="\${task.project}" data-filepath="\${task.filePath}" data-line-number="\${task.lineNumber}">
+        <tr data-task-id="\${task.id}" data-project="\${task.project}" data-file="\${filename}" data-filepath="\${task.filePath}" data-line-number="\${task.lineNumber}">
           <td class="status-cell">
             <input 
               type="checkbox" 
@@ -1424,6 +1545,34 @@ export class TaskTableProvider {
         dateFilter.value = currentDateFilter;
       }
       
+      const projectFilterDisplay = document.getElementById('projectFilterDisplay');
+      if (projectFilterDisplay) {
+        if (currentFilter.length === 0) {
+          projectFilterDisplay.value = '';
+          projectFilterDisplay.placeholder = 'All Projects';
+        } else if (currentFilter.length === 1) {
+          projectFilterDisplay.value = currentFilter[0];
+          projectFilterDisplay.placeholder = '';
+        } else {
+          projectFilterDisplay.value = currentFilter.length + ' projects selected';
+          projectFilterDisplay.placeholder = '';
+        }
+      }
+      
+      const fileFilterDisplay = document.getElementById('fileFilterDisplay');
+      if (fileFilterDisplay) {
+        if (currentFileFilter.length === 0) {
+          fileFilterDisplay.value = '';
+          fileFilterDisplay.placeholder = 'All Files';
+        } else if (currentFileFilter.length === 1) {
+          fileFilterDisplay.value = currentFileFilter[0];
+          fileFilterDisplay.placeholder = '';
+        } else {
+          fileFilterDisplay.value = currentFileFilter.length + ' files selected';
+          fileFilterDisplay.placeholder = '';
+        }
+      }
+      
       // Then apply sort
       if (currentSort.column) {
         // Update UI to show current sort
@@ -1447,12 +1596,16 @@ export class TaskTableProvider {
       let visibleCount = 0;
       
       rows.forEach(row => {
-        const matchesProject = !currentFilter || row.getAttribute('data-project') === currentFilter;
+        const matchesProject = currentFilter.length === 0 || currentFilter.includes(row.getAttribute('data-project'));
         const isCompleted = row.querySelector('input[type="checkbox"]').checked;
         
         // Date filter
         const date = row.querySelector('.date-cell').textContent;
         const matchesDate = !currentDateFilter || date === currentDateFilter;
+        
+        // File filter (matches if no filter or file is in selected files array)
+        const rowFile = row.getAttribute('data-file');
+        const matchesFile = currentFileFilter.length === 0 || currentFileFilter.includes(rowFile);
         
         // Search in task text, project, and date
         let matchesSearch = true;
@@ -1474,7 +1627,7 @@ export class TaskTableProvider {
           }
         }
         
-        const shouldShow = matchesProject && matchesDate && matchesSearch && (!currentHideCompleted || !isCompleted);
+        const shouldShow = matchesProject && matchesDate && matchesFile && matchesSearch && (!currentHideCompleted || !isCompleted);
         
         row.style.display = shouldShow ? '' : 'none';
         if (shouldShow) visibleCount++;
@@ -1535,33 +1688,11 @@ export class TaskTableProvider {
       rows.forEach(row => tbody.appendChild(row));
     }
     
-    function updateProjectFilter(projects) {
-      const select = document.getElementById('projectFilter');
-      if (!select) return;
-      
-      // Save current filter BEFORE rebuilding dropdown
-      const savedFilter = currentFilter;
-      
-      select.innerHTML = '<option value="">All Projects</option>' + 
-        projects.map(p => '<option value="' + p + '">' + p + '</option>').join('');
-      
-      // Restore saved filter if still valid
-      if (savedFilter && projects.includes(savedFilter)) {
-        select.value = savedFilter;
-        currentFilter = savedFilter;
-      } else {
-        // Reset filter if previous project no longer exists
-        select.value = '';
-        currentFilter = '';
-      }
-    }
-    
     // Listen for updates from extension
     window.addEventListener('message', event => {
       const message = event.data;
       if (message.command === 'updateTasks') {
         rebuildTable(message.tasks);
-        updateProjectFilter(message.projects);
         
         let filterApplied = false;
         
@@ -1577,10 +1708,11 @@ export class TaskTableProvider {
         
         // Apply project filter if provided
         if (message.filterProject) {
-          currentFilter = message.filterProject;
-          const projectSelect = document.getElementById('projectFilter');
-          if (projectSelect) {
-            projectSelect.value = message.filterProject;
+          currentFilter = [message.filterProject];
+          const projectFilterDisplay = document.getElementById('projectFilterDisplay');
+          if (projectFilterDisplay) {
+            projectFilterDisplay.value = message.filterProject;
+            projectFilterDisplay.placeholder = '';
           }
           filterApplied = true;
         }
@@ -1613,6 +1745,96 @@ export class TaskTableProvider {
             }
           }, 100);
         }
+      } else if (message.command === 'filesSelected') {
+        // Update file filter with selected files
+        currentFileFilter = message.files || [];
+        
+        // If files are selected, clear other filters
+        if (currentFileFilter.length > 0) {
+          // Clear project filter
+          currentFilter = [];
+          const projectFilterDisplay = document.getElementById('projectFilterDisplay');
+          if (projectFilterDisplay) {
+            projectFilterDisplay.value = '';
+            projectFilterDisplay.placeholder = 'All Projects';
+          }
+          
+          // Clear date filter
+          const dateInput = document.getElementById('dateFilter');
+          if (dateInput) {
+            dateInput.value = '';
+            currentDateFilter = '';
+          }
+          
+          // Clear search
+          const searchInput = document.getElementById('searchInput');
+          if (searchInput) {
+            searchInput.value = '';
+            currentSearchText = '';
+          }
+        }
+        
+        // Update display
+        const fileFilterDisplay = document.getElementById('fileFilterDisplay');
+        if (fileFilterDisplay) {
+          if (currentFileFilter.length === 0) {
+            fileFilterDisplay.value = '';
+            fileFilterDisplay.placeholder = 'All Files';
+          } else if (currentFileFilter.length === 1) {
+            fileFilterDisplay.value = currentFileFilter[0];
+            fileFilterDisplay.placeholder = '';
+          } else {
+            fileFilterDisplay.value = currentFileFilter.length + ' files selected';
+            fileFilterDisplay.placeholder = '';
+          }
+        }
+        
+        applyFilter();
+      } else if (message.command === 'projectsSelected') {
+        // Update project filter with selected projects
+        currentFilter = message.projects || [];
+        
+        // If projects are selected, clear other filters
+        if (currentFilter.length > 0) {
+          // Clear file filter
+          currentFileFilter = [];
+          const fileFilterDisplay = document.getElementById('fileFilterDisplay');
+          if (fileFilterDisplay) {
+            fileFilterDisplay.value = '';
+            fileFilterDisplay.placeholder = 'All Files';
+          }
+          
+          // Clear date filter
+          const dateInput = document.getElementById('dateFilter');
+          if (dateInput) {
+            dateInput.value = '';
+            currentDateFilter = '';
+          }
+          
+          // Clear search
+          const searchInput = document.getElementById('searchInput');
+          if (searchInput) {
+            searchInput.value = '';
+            currentSearchText = '';
+          }
+        }
+        
+        // Update display
+        const projectFilterDisplay = document.getElementById('projectFilterDisplay');
+        if (projectFilterDisplay) {
+          if (currentFilter.length === 0) {
+            projectFilterDisplay.value = '';
+            projectFilterDisplay.placeholder = 'All Projects';
+          } else if (currentFilter.length === 1) {
+            projectFilterDisplay.value = currentFilter[0];
+            projectFilterDisplay.placeholder = '';
+          } else {
+            projectFilterDisplay.value = currentFilter.length + ' projects selected';
+            projectFilterDisplay.placeholder = '';
+          }
+        }
+        
+        applyFilter();
       }
     });
     
@@ -1673,37 +1895,69 @@ export class TaskTableProvider {
       if (e.target.classList.contains('project-cell') && e.target.tagName === 'TD') {
         const clickedProject = e.target.textContent.trim();
         
-        // Toggle: if same project is clicked, clear filter; otherwise set new filter
-        if (currentFilter === clickedProject) {
-          currentFilter = '';
+        // Toggle: if project is in filter, remove it; otherwise add it
+        const index = currentFilter.indexOf(clickedProject);
+        if (index > -1) {
+          currentFilter.splice(index, 1);
         } else {
-          currentFilter = clickedProject;
+          currentFilter.push(clickedProject);
         }
         
-        // Update the project select dropdown
-        const projectSelect = document.getElementById('projectFilter');
-        if (projectSelect) {
-          projectSelect.value = currentFilter;
+        // Update the project display
+        const projectFilterDisplay = document.getElementById('projectFilterDisplay');
+        if (projectFilterDisplay) {
+          if (currentFilter.length === 0) {
+            projectFilterDisplay.value = '';
+            projectFilterDisplay.placeholder = 'All Projects';
+          } else if (currentFilter.length === 1) {
+            projectFilterDisplay.value = currentFilter[0];
+            projectFilterDisplay.placeholder = '';
+          } else {
+            projectFilterDisplay.value = currentFilter.length + ' projects selected';
+            projectFilterDisplay.placeholder = '';
+          }
         }
         
         applyFilter();
       }
     });
     
-    // Project filter
-    document.getElementById('projectFilter')?.addEventListener('change', function(e) {
-      currentFilter = e.target.value;
-      applyFilter();
+    // Project filter - open dialog on click
+    document.getElementById('projectFilterDisplay')?.addEventListener('click', function() {
+      vscode.postMessage({
+        command: 'selectProjects',
+        currentSelection: currentFilter
+      });
     });
     
     // Clear project button
     document.getElementById('clearProject')?.addEventListener('click', function() {
-      const projectSelect = document.getElementById('projectFilter');
-      if (projectSelect) {
-        projectSelect.value = '';
-        currentFilter = '';
-        applyFilter();
+      currentFilter = [];
+      const projectFilterDisplay = document.getElementById('projectFilterDisplay');
+      if (projectFilterDisplay) {
+        projectFilterDisplay.value = '';
+        projectFilterDisplay.placeholder = 'All Projects';
       }
+      applyFilter();
+    });
+    
+    // File filter - open dialog on click
+    document.getElementById('fileFilterDisplay')?.addEventListener('click', function() {
+      vscode.postMessage({
+        command: 'selectFiles',
+        currentSelection: currentFileFilter
+      });
+    });
+    
+    // Clear file button
+    document.getElementById('clearFile')?.addEventListener('click', function() {
+      currentFileFilter = [];
+      const fileFilterDisplay = document.getElementById('fileFilterDisplay');
+      if (fileFilterDisplay) {
+        fileFilterDisplay.value = '';
+        fileFilterDisplay.placeholder = 'All Files';
+      }
+      applyFilter();
     });
     
     // Hide completed toggle
