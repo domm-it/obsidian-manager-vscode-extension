@@ -796,7 +796,7 @@ export class TaskTableProvider {
         </fieldset>
       </div>
       <div class="filter-group toggle-container">
-        <input type="checkbox" id="hideCompleted" />
+        <input type="checkbox" id="hideCompleted" checked />
         <label for="hideCompleted" class="toggle-switch"></label>
         <label for="hideCompleted" style="cursor: pointer;">Hide completed</label>
       </div>
@@ -862,7 +862,7 @@ export class TaskTableProvider {
     // Preserve state - default sort by date descending
     let currentSort = { column: 'date', direction: 'desc' };
     let currentFilter = '';
-    let currentHideCompleted = false;
+    let currentHideCompleted = true;
     let currentSearchText = '';
     let currentDateFilter = '';
     
