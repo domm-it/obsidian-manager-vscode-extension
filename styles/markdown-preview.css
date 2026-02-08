@@ -8,20 +8,16 @@
 /*================================================================
 # MARK: NUMERIC LIST STYLES
 ================================================================*/
-ol {
+ol, ul {
     padding-left: 20px;
-}
-
-ul {
-    padding-left: 20px;
+    margin-bottom: 0;
+    line-height: 2;
 }
 
 /* Ensure nested lists appear below parent items */
 li > ul,
 li > ol {
     width: 100%;
-    margin-top: 4px;
-    margin-bottom: 4px;
     display: block;
 }
 
