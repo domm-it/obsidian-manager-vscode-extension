@@ -12,60 +12,25 @@ let _lastDragged: any[] = [];
 // Helper function to safely show markdown preview by preloading the document first
 async function showMarkdownPreviewSafe(uri: vscode.Uri): Promise<void> {
   try {
-    // Preload document to ensure it's in VS Code's document cache
-    const document = await vscode.workspace.openTextDocument(uri);
-    
-    // Wait for document content to be available with exponential backoff
-    let attempts = 0;
-    const maxAttempts = 3;
-    while (attempts < maxAttempts) {
-      if (document.getText().length > 0 || attempts === maxAttempts - 1) {
-        break;
-      }
-      // Short delays: 25ms, 50ms, 100ms
-      const delay = 25 * Math.pow(2, attempts);
-      await new Promise(resolve => setTimeout(resolve, delay));
-      attempts++;
-    }
-    
-    // Short delay to ensure document is fully processed
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    try {
-      // Try to show markdown preview
-      await vscode.commands.executeCommand('markdown.showPreview', uri);
-      
-      // Additional delay to let the preview render
-      await new Promise(resolve => setTimeout(resolve, 200));
-      
-    } catch (previewError) {
-      console.warn('Direct preview failed, trying alternative approach:', previewError);
-      
-      // Alternative approach: open in editor first, then show preview
-      await vscode.window.showTextDocument(document, { 
-        preview: true,
-        preserveFocus: true
-      });
-      
-      // Wait a bit more and try preview again
-      setTimeout(async () => {
-        try {
-          await vscode.commands.executeCommand('markdown.showPreview', uri);
-        } catch (e) {
-          // If this also fails, the document will remain in editor mode
-          console.warn('Alternative preview approach also failed:', e);
-        }
-      }, 500);
-    }
-    
+    // Open with the markdown preview editor (renders HTML) in a permanent tab
+    await vscode.commands.executeCommand('vscode.openWith', uri, 'vscode.markdown.preview.editor', {
+      preview: false, // Make it a permanent tab, not temporary
+      preserveFocus: false
+    });
   } catch (error) {
-    // Final fallback to regular file opening if everything fails
-    console.error('All preview approaches failed:', error);
+    // Fallback to the old approach if vscode.openWith fails
+    console.warn('vscode.openWith failed, trying markdown.showPreview:', error);
     try {
-      const document = await vscode.workspace.openTextDocument(uri);
-      await vscode.window.showTextDocument(document, { preview: true });
-    } catch (fallbackError) {
-      vscode.window.showErrorMessage(`Unable to open file: ${String(fallbackError)}`);
+      await vscode.commands.executeCommand('markdown.showPreview', uri);
+    } catch (previewError) {
+      // Final fallback to regular file opening
+      console.error('All preview approaches failed:', previewError);
+      try {
+        const document = await vscode.workspace.openTextDocument(uri);
+        await vscode.window.showTextDocument(document, { preview: false });
+      } catch (fallbackError) {
+        vscode.window.showErrorMessage(`Unable to open file: ${String(fallbackError)}`);
+      }
     }
   }
 }
