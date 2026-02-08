@@ -90,32 +90,18 @@ async function markCheckbox(source: string, line: number, checked: boolean) {
 
         const newMark = checked ? 'x' : ' ';
 
-        // Find or open the editor for this document
-        let editor = vscode.window.visibleTextEditors.find(e => e.document.uri.toString() === uri.toString());
+        // Use WorkspaceEdit to modify the file without opening an editor
+        const edit = new vscode.WorkspaceEdit();
+        const checkRange = new vscode.Range(
+            line,
+            checkboxColumn + 1,
+            line,
+            checkboxColumn + 2
+        );
+        edit.replace(uri, checkRange, newMark);
         
-        if (!editor) {
-            editor = await vscode.window.showTextDocument(document, { 
-                preview: false, 
-                preserveFocus: true,
-                viewColumn: vscode.ViewColumn.Active
-            });
-            // Give a moment for the editor to be ready
-            await new Promise(resolve => setTimeout(resolve, 10));
-        }
-
-        // Use editor.edit() for reliable editing
-        const editSuccess = await editor.edit(editBuilder => {
-            const checkRange = new vscode.Range(
-                line,
-                checkboxColumn + 1,
-                line,
-                checkboxColumn + 2
-            );
-            editBuilder.replace(checkRange, newMark);
-        }, {
-            undoStopBefore: true,
-            undoStopAfter: true
-        });
+        // Apply the edit
+        const editSuccess = await vscode.workspace.applyEdit(edit);
 
         if (editSuccess) {
             // Save with retry logic

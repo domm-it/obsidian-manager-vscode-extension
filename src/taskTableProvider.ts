@@ -17,6 +17,7 @@ export class TaskTableProvider {
   private panel: vscode.WebviewPanel | undefined;
   private tasks: Task[] = [];
   private vaultPath: string = '';
+  private fileWatcher: vscode.FileSystemWatcher | undefined;
 
   constructor(private context: vscode.ExtensionContext) {}
 
@@ -46,7 +47,15 @@ export class TaskTableProvider {
 
       this.panel.onDidDispose(() => {
         this.panel = undefined;
+        // Dispose file watcher when panel is closed
+        if (this.fileWatcher) {
+          this.fileWatcher.dispose();
+          this.fileWatcher = undefined;
+        }
       });
+      
+      // Setup file watcher to auto-reload tasks when vault files change
+      this.setupFileWatcher();
 
       // Handle messages from the webview
       this.panel.webview.onDidReceiveMessage(
@@ -120,6 +129,36 @@ export class TaskTableProvider {
     if (filterDate || filterProject || filterHashtag || filterFile) {
       this.sendTasksUpdate(undefined, filterDate, filterProject, filterHashtag, filterFile);
     }
+  }
+
+  private setupFileWatcher() {
+    // Dispose existing watcher if any
+    if (this.fileWatcher) {
+      this.fileWatcher.dispose();
+    }
+    
+    // Create a glob pattern for markdown files in the vault
+    const pattern = new vscode.RelativePattern(this.vaultPath, '**/*.md');
+    this.fileWatcher = vscode.workspace.createFileSystemWatcher(pattern);
+    
+    // Debounce function to avoid too many reloads
+    let reloadTimeout: NodeJS.Timeout | undefined;
+    const debounceReload = () => {
+      if (reloadTimeout) {
+        clearTimeout(reloadTimeout);
+      }
+      reloadTimeout = setTimeout(async () => {
+        if (this.panel) {
+          await this.loadTasks();
+          this.sendTasksUpdate();
+        }
+      }, 500); // Wait 500ms after last change before reloading
+    };
+    
+    // Watch for file changes
+    this.fileWatcher.onDidChange(debounceReload);
+    this.fileWatcher.onDidCreate(debounceReload);
+    this.fileWatcher.onDidDelete(debounceReload);
   }
 
   private async loadTasks() {

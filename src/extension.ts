@@ -2532,6 +2532,11 @@ export async function activate(context: vscode.ExtensionContext) {
       fileUri = first.resourceUri;
     }
     
+    // If no URI from args, use active editor
+    if (!fileUri && vscode.window.activeTextEditor) {
+      fileUri = vscode.window.activeTextEditor.document.uri;
+    }
+    
     if (fileUri) {
       const fileName = path.basename(fileUri.fsPath);
       await taskTableProvider.show(undefined, undefined, undefined, fileName);

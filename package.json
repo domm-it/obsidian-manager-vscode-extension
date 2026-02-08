@@ -306,6 +306,11 @@
           "group": "navigation"
         },
         {
+          "command": "obsidianManager.filterTasksByFile",
+          "when": "resourceExtname == .md || editorLangId == markdown",
+          "group": "navigation"
+        },
+        {
           "command": "obsidianManager.duplicateFromEditor",
           "when": "resourceExtname == .md || editorLangId == markdown",
           "group": "navigation"
