@@ -450,10 +450,58 @@ export class TaskTableProvider {
       min-width: 150px;
     }
     
-    .filters input[type="checkbox"] {
+    .filters input[type="checkbox"]:not(#hideCompleted) {
       cursor: pointer;
       width: 16px;
       height: 16px;
+    }
+    
+    /* Toggle switch styling */
+    .toggle-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    #hideCompleted {
+      opacity: 0;
+      width: 0;
+      height: 0;
+      position: absolute;
+    }
+    
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 34px;
+      height: 18px;
+      background-color: var(--vscode-input-background);
+      border: 1px solid var(--vscode-input-border);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    
+    .toggle-switch::after {
+      content: '';
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      left: 2px;
+      top: 2px;
+      background-color: var(--vscode-input-foreground);
+      border-radius: 50%;
+      transition: transform 0.2s;
+    }
+    
+    #hideCompleted:checked + .toggle-switch {
+      background-color: var(--vscode-button-background);
+      border-color: var(--vscode-button-background);
+    }
+    
+    #hideCompleted:checked + .toggle-switch::after {
+      background-color: var(--vscode-button-foreground);
+      transform: translateX(15px);
     }
     
     .filters input[type="text"] {
@@ -747,9 +795,10 @@ export class TaskTableProvider {
           <button class="clear-btn" id="clearProject" title="Clear project filter">×</button>
         </fieldset>
       </div>
-      <div class="filter-group">
+      <div class="filter-group toggle-container">
         <input type="checkbox" id="hideCompleted" />
-        <label for="hideCompleted">Hide completed</label>
+        <label for="hideCompleted" class="toggle-switch"></label>
+        <label for="hideCompleted" style="cursor: pointer;">Hide completed</label>
       </div>
     </div>
   </div>
@@ -962,13 +1011,11 @@ export class TaskTableProvider {
         </tr>
       \`).join('');
       
-      console.log('Table rebuilt with', tasks.length, 'tasks');
+      console.log('rebuildTable: currentSort =', currentSort);
       
-      // Reapply filter
-      applyFilter();
-      
-      // Reapply sort
+      // Reapply sort FIRST
       if (currentSort.column) {
+        console.log('Applying sort:', currentSort.column, currentSort.direction);
         // Update UI to show current sort
         document.querySelectorAll('th.sortable').forEach(h => {
           h.classList.remove('sorted-asc', 'sorted-desc');
@@ -976,15 +1023,20 @@ export class TaskTableProvider {
         const header = document.querySelector('th[data-column="' + currentSort.column + '"]');
         if (header) {
           header.classList.add('sorted-' + currentSort.direction);
+          console.log('Header found and class added');
+        } else {
+          console.log('Header NOT found!');
         }
         applySorting();
+      } else {
+        console.log('No currentSort.column - skipping sort');
       }
       
-      // Restore filter states
-      const projectFilter = document.getElementById('projectFilter');
-      if (projectFilter) {
-        projectFilter.value = currentFilter;
-      }
+      // Then apply filter (after sorting)
+      console.log('Calling applyFilter from rebuildTable');
+      applyFilter();
+      
+      // DON'T restore filter states here - will be done after updateProjectFilter
       
       const hideCompletedCheckbox = document.getElementById('hideCompleted');
       if (hideCompletedCheckbox) {
@@ -1003,6 +1055,7 @@ export class TaskTableProvider {
     }
     
     function applyFilter() {
+      console.log('applyFilter called with:', { currentFilter, currentDateFilter, currentHideCompleted, currentSearchText });
       const rows = document.querySelectorAll('#tasksTable tbody tr');
       const searchLower = currentSearchText.toLowerCase();
       let visibleCount = 0;
@@ -1038,13 +1091,17 @@ export class TaskTableProvider {
       if (taskCountEl) {
         taskCountEl.textContent = '(' + visibleCount + ')';
       }
+      console.log('applyFilter complete. Visible rows:', visibleCount);
     }
     
     function applySorting() {
       const tbody = document.querySelector('#tasksTable tbody');
       if (!tbody) return;
       
+      console.log('applySorting called');
+      
       const rows = Array.from(tbody.querySelectorAll('tr'));
+      console.log('Rows to sort:', rows.length);
       
       rows.sort((a, b) => {
         let aVal, bVal;
@@ -1085,20 +1142,34 @@ export class TaskTableProvider {
         return result;
       });
       
+      console.log('Sorting complete, first 3 rows:', rows.slice(0, 3).map(r => {
+        if (currentSort.column === 'date') return r.querySelector('.date-cell').textContent;
+        if (currentSort.column === 'project') return r.querySelector('.project-cell').textContent;
+        return '';
+      }));
+      
       rows.forEach(row => tbody.appendChild(row));
+      console.log('Rows appended to tbody');
     }
     
     function updateProjectFilter(projects) {
       const select = document.getElementById('projectFilter');
       if (!select) return;
       
-      const currentValue = select.value;
-      select.innerHTML = '<option value="">All Projects</option>' + 
-        projects.map(p => \`<option value="\${p}">\${p}</option>\`).join('');
+      // Save current filter BEFORE rebuilding dropdown
+      const savedFilter = currentFilter;
       
-      // Restore previous selection if still valid
-      if (projects.includes(currentValue)) {
-        select.value = currentValue;
+      select.innerHTML = '<option value="">All Projects</option>' + 
+        projects.map(p => '<option value="' + p + '">' + p + '</option>').join('');
+      
+      // Restore saved filter if still valid
+      if (savedFilter && projects.includes(savedFilter)) {
+        select.value = savedFilter;
+        currentFilter = savedFilter;
+      } else {
+        // Reset filter if previous project no longer exists
+        select.value = '';
+        currentFilter = '';
       }
     }
     
@@ -1157,9 +1228,9 @@ export class TaskTableProvider {
       }
     });
     
-    // Click on date cells to toggle date filter
+    // Click on date cells to toggle date filter (only TD, not TH header)
     document.addEventListener('click', function(e) {
-      if (e.target.classList.contains('date-cell')) {
+      if (e.target.classList.contains('date-cell') && e.target.tagName === 'TD') {
         const clickedDate = e.target.textContent.trim();
         
         // Toggle: if same date is clicked, clear filter; otherwise set new filter
@@ -1178,8 +1249,8 @@ export class TaskTableProvider {
         applyFilter();
       }
       
-      // Click on project cells to toggle project filter
-      if (e.target.classList.contains('project-cell')) {
+      // Click on project cells to toggle project filter (only TD, not TH header)
+      if (e.target.classList.contains('project-cell') && e.target.tagName === 'TD') {
         const clickedProject = e.target.textContent.trim();
         
         // Toggle: if same project is clicked, clear filter; otherwise set new filter
