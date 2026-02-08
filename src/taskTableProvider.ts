@@ -324,15 +324,21 @@ export class TaskTableProvider {
       await new Promise(resolve => setTimeout(resolve, 100));
       
       try {
-        // Try to show markdown preview
-        await vscode.commands.executeCommand('markdown.showPreview', uri);
+        // Use vscode.openWith to open in rendered preview mode (not temporary preview)
+        await vscode.commands.executeCommand('vscode.openWith', uri, 'vscode.markdown.preview.editor');
+      } catch (error) {
+        console.error('vscode.openWith failed, trying alternative:', error);
         
-        // Additional delay to let the preview render
-        await new Promise(resolve => setTimeout(resolve, 200));
-      } catch (previewError) {
-        // If preview fails, fall back to opening in edit mode
-        const doc = await vscode.workspace.openTextDocument(uri);
-        await vscode.window.showTextDocument(doc, { preview: false });
+        try {
+          // Fallback: try markdown.showPreview
+          await vscode.commands.executeCommand('markdown.showPreview', uri);
+          await new Promise(resolve => setTimeout(resolve, 200));
+        } catch (fallbackError) {
+          // If all preview methods fail, fall back to opening in edit mode
+          console.error('All preview methods failed:', fallbackError);
+          const doc = await vscode.workspace.openTextDocument(uri);
+          await vscode.window.showTextDocument(doc, { preview: false });
+        }
       }
     } catch (error) {
       vscode.window.showErrorMessage(`Error opening file: ${error}`);
