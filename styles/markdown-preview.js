@@ -120,9 +120,135 @@
             addCopyButtonsToCodeBlocks();
 
             addCopyToShortCode();
+            
+            enhanceTaskCheckboxes();
 
         } catch (e) {
             console.warn('Error in initializeMarkdownEnhancements:', e);
+        }
+    }
+
+    /*================================================================
+    // region - TASK CHECKBOXES
+    ================================================================*/
+    function enhanceTaskCheckboxes() {
+        try {
+            console.log('=== Enhancing task checkboxes ===');
+            
+            // Get server data from the injected div
+            const serverDataDiv = document.getElementById('mdCheckboxServerData');
+            if (!serverDataDiv) {
+                console.log('No checkbox server data found');
+                return;
+            }
+            
+            const port = serverDataDiv.getAttribute('data-port');
+            const nonce = serverDataDiv.getAttribute('data-nonce');
+            
+            if (!port || !nonce) {
+                console.log('Invalid server data:', { port, nonce });
+                return;
+            }
+            
+            // Get the source file from the base tag or meta tag
+            const baseTag = document.querySelector('base');
+            let source = '';
+            if (baseTag && baseTag.href) {
+                // Keep as file:// URI for VS Code
+                source = baseTag.href;
+            }
+            
+            console.log('Checkbox setup:', { 
+                port, 
+                noncePreview: nonce.substring(0, 8) + '...', 
+                source,
+                baseTag: baseTag ? baseTag.href : 'not found'
+            });
+            
+            if (!source) {
+                console.log('No source file found');
+                return;
+            }
+            
+            // Find all checkbox inputs in the document
+            const checkboxes = document.querySelectorAll('input[type="checkbox"].task-list-item-checkbox');
+            console.log(`Found ${checkboxes.length} checkboxes`);
+            
+            checkboxes.forEach((checkbox, index) => {
+                // Make checkbox enabled (not disabled)
+                checkbox.removeAttribute('disabled');
+                checkbox.style.cursor = 'pointer';
+                
+                // Get the line number from the data attribute
+                const listItem = checkbox.closest('li.task-list-item');
+                if (!listItem) {
+                    console.warn(`Checkbox ${index}: No list item found`);
+                    return;
+                }
+                
+                // Get line number from the li element's data-line attribute
+                const lineNumber = listItem.getAttribute('data-line');
+                if (!lineNumber) {
+                    console.warn(`Checkbox ${index}: No line number found for checkbox`, listItem);
+                    return;
+                }
+                
+                console.log(`Checkbox ${index} setup: line ${lineNumber}, checked: ${checkbox.checked}`);
+                
+                // Add click handler for interactivity
+                checkbox.addEventListener('change', async (e) => {
+                    e.stopPropagation();
+                    
+                    const checked = checkbox.checked;
+                    
+                    console.log(`Checkbox clicked: line ${lineNumber}, new state: ${checked}`);
+                    
+                    // Visual feedback
+                    if (checked) {
+                        listItem.style.opacity = '0.6';
+                        listItem.style.textDecoration = 'line-through';
+                    } else {
+                        listItem.style.opacity = '1';
+                        listItem.style.textDecoration = 'none';
+                    }
+                    
+                    // Send request to server to update the file
+                    try {
+                        const url = `http://localhost:${port}/checkbox/mark?source=${encodeURIComponent(source)}&line=${lineNumber}&checked=${checked}&nonce=${encodeURIComponent(nonce)}`;
+                        
+                        console.log('Sending checkbox update:', {
+                            source,
+                            line: lineNumber,
+                            checked,
+                            urlPreview: url.substring(0, 100) + '...'
+                        });
+                        
+                        // Use fetch with an image to avoid CORS issues
+                        const img = new Image();
+                        img.src = url;
+                        
+                        img.onload = () => {
+                            console.log('✓ Checkbox update request completed successfully');
+                        };
+                        img.onerror = (err) => {
+                            console.error('✗ Checkbox update request failed:', err);
+                        };
+                        
+                    } catch (error) {
+                        console.error('Error updating checkbox:', error);
+                    }
+                });
+                
+                // Apply initial styling based on checked state
+                if (checkbox.checked) {
+                    listItem.style.opacity = '0.6';
+                    listItem.style.textDecoration = 'line-through';
+                }
+            });
+            
+            console.log('=== Checkbox enhancement complete ===');
+        } catch (e) {
+            console.warn('Error in enhanceTaskCheckboxes:', e);
         }
     }
 

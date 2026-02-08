@@ -2,9 +2,11 @@ import * as vscode from 'vscode';
 import { ObsidianTreeProvider } from './obsidianTree';
 import { TaskTableProvider } from './taskTableProvider';
 import { HashtagTreeProvider } from './hashtagTree';
+import { createCheckboxServer } from './checkboxServer';
 import * as path from 'path';
 import { promises as fs } from 'fs';
 import * as os from 'os';
+import type MarkdownIt from 'markdown-it';
 
 // Drag & Drop controller state (last dragged items). We'll record last dragged sources in memory
 let _lastDragged: any[] = [];
@@ -12,24 +14,33 @@ let _lastDragged: any[] = [];
 // Helper function to safely show markdown preview by preloading the document first
 async function showMarkdownPreviewSafe(uri: vscode.Uri): Promise<void> {
   try {
-    // Open with the markdown preview editor (renders HTML) in a permanent tab
+    // Use the built-in markdown preview editor
     await vscode.commands.executeCommand('vscode.openWith', uri, 'vscode.markdown.preview.editor', {
-      preview: false, // Make it a permanent tab, not temporary
+      viewColumn: vscode.ViewColumn.Active,
       preserveFocus: false
     });
   } catch (error) {
-    // Fallback to the old approach if vscode.openWith fails
-    console.warn('vscode.openWith failed, trying markdown.showPreview:', error);
+    console.error('vscode.openWith failed, trying alternative:', error);
     try {
+      // Alternative: open document first then show preview
+      const document = await vscode.workspace.openTextDocument(uri);
+      await vscode.window.showTextDocument(document, { 
+        preview: false,
+        preserveFocus: false
+      });
+      
+      // Try to switch to preview
+      await new Promise(resolve => setTimeout(resolve, 100));
       await vscode.commands.executeCommand('markdown.showPreview', uri);
-    } catch (previewError) {
-      // Final fallback to regular file opening
-      console.error('All preview approaches failed:', previewError);
+      
+    } catch (fallbackError) {
+      console.error('All preview methods failed:', fallbackError);
+      // Final fallback to just editor mode
       try {
         const document = await vscode.workspace.openTextDocument(uri);
         await vscode.window.showTextDocument(document, { preview: false });
-      } catch (fallbackError) {
-        vscode.window.showErrorMessage(`Unable to open file: ${String(fallbackError)}`);
+      } catch (finalError) {
+        vscode.window.showErrorMessage(`Unable to open file: ${String(finalError)}`);
       }
     }
   }
@@ -455,7 +466,17 @@ class WikiHoverProvider implements vscode.HoverProvider {
   }
 }
 
+// Store server data globally so extendMarkdownIt can access it
+let checkboxServerPort: number;
+let checkboxServerNonce: string;
+
 export async function activate(context: vscode.ExtensionContext) {
+  // Start checkbox server for interactive markdown checkboxes
+  const { port, serverNonce, disposable } = createCheckboxServer();
+  checkboxServerPort = port;
+  checkboxServerNonce = serverNonce;
+  context.subscriptions.push(disposable);
+  
   const openHandler = async (args: any) => {
     // Prefer a URI passed by the command (e.g., from a menu on a resource). Fallback to active editor.
     let fileUri: vscode.Uri | undefined;
@@ -2523,6 +2544,45 @@ export async function activate(context: vscode.ExtensionContext) {
     hashtagProvider.refresh();
   });
   context.subscriptions.push(refreshHashtagsCmd);
+  
+  // Return the markdown API
+  return {
+    extendMarkdownIt(md: MarkdownIt) {
+      // Use markdown-it-task-checkbox plugin
+      md.use(require('markdown-it-task-checkbox'), {
+        disabled: false,
+        divWrap: false,
+        divClass: 'task-list-item',
+        idPrefix: 'task-item-',
+        ulClass: 'task-list',
+        liClass: 'task-list-item'
+      });
+      
+      // Add line numbers to task list items
+      md.core.ruler.after('inline', 'checkbox_line_numbers', (state) => {
+        const tokens = state.tokens;
+        for (let i = 0; i < tokens.length; i++) {
+          const token = tokens[i];
+          if (token.type === 'list_item_open' && token.attrGet('class')?.includes('task-list-item')) {
+            // Get line number from the token map
+            if (token.map && token.map.length > 0) {
+              const lineNumber = token.map[0];
+              token.attrSet('data-line', String(lineNumber));
+            }
+          }
+        }
+      });
+      
+      // Inject server data into the HTML for the checkbox script
+      md.core.ruler.push('checkbox_server_data', (state) => {
+        const serverDataToken = new state.Token('html_block', '', 0);
+        serverDataToken.content = `<div hidden id="mdCheckboxServerData" data-port="${checkboxServerPort}" data-nonce="${checkboxServerNonce}"></div>`;
+        state.tokens.unshift(serverDataToken);
+      });
+      
+      return md;
+    }
+  };
 }
 
 export function deactivate() {}

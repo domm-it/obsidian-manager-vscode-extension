@@ -12,6 +12,19 @@ ol {
     padding-left: 20px;
 }
 
+ul {
+    padding-left: 20px;
+}
+
+/* Ensure nested lists appear below parent items */
+li > ul,
+li > ol {
+    width: 100%;
+    margin-top: 4px;
+    margin-bottom: 4px;
+    display: block;
+}
+
 ul li::marker,
 ol li::marker{
     color: #999;
@@ -23,39 +36,138 @@ ol li::marker{
 # MARK: TASK LIST STYLES
 ================================================================*/
 .task-list {
-    margin-bottom: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    padding-left: 20px;
-    list-style-position: inside;
+    list-style: none;
+    padding-left: 0;
+    margin: 8px 0;
+    display: block !important;
+    width: 100%;
 }
 
 .task-list .task-list-item {
     list-style: none !important;
-}
-
-.task-list:not(.code-line){
     display: flex;
-    flex-direction: column;
-    gap: 5px;
-}
-
-.task-list .task-list-item:not(:last-child) {
-    border-bottom: 1px dashed #555;
-    padding-bottom: 10px;
-}
-
-.task-list .task-list-item:last-child {
-    margin-bottom: 10px;
-}
-
-.task-list .code-line {
-    margin-bottom: 0 !important;
+    align-items: flex-start;
+    padding: 2px 0;
+    margin: 0;
+    width: 100%;
+    flex-wrap: wrap;
 }
 
 ul.task-list {
-    margin-top: 5px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+    padding-left: 10px;
+    display: block !important;
+}
+
+/* Nested task lists - maintain tree structure */
+.task-list-item ul.task-list {
+    width: 100%;
+    margin-top: 4px;
+    margin-bottom: 4px;
+    padding-left: 24px;
+    flex-basis: 100%;
+}
+
+/* Make sure nested lists appear below the parent item */
+.task-list-item > ul.task-list,
+.task-list-item > .task-list {
+    width: 100%;
+    margin-left: 0;
+    order: 2;
+}
+
+/*================================================================
+# MARK: TASK CHECKBOXES
+================================================================*/
+input[type="checkbox"].task-list-item-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    min-height: 16px;
+    border: 2px solid var(--vscode-input-border, #555);
+    border-radius: 2px;
+    background-color: var(--vscode-input-background, transparent);
+    cursor: pointer !important;
+    position: relative;
+    margin-right: 8px;
+    margin-top: 2px;
+    margin-left: 0;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+input[type="checkbox"].task-list-item-checkbox:hover {
+    border-color: var(--vscode-focusBorder, #007acc);
+    background-color: var(--vscode-input-background, rgba(255, 255, 255, 0.05));
+}
+
+input[type="checkbox"].task-list-item-checkbox:checked {
+    background-color: var(--vscode-button-background, #0e639c);
+    border-color: var(--vscode-button-background, #0e639c);
+}
+
+input[type="checkbox"].task-list-item-checkbox:checked::after {
+    content: '';
+    position: absolute;
+    left: 3px;
+    top: 0px;
+    width: 5px;
+    height: 9px;
+    border: solid var(--vscode-button-foreground, white);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+/* Ensure checkbox is not disabled */
+input[type="checkbox"].task-list-item-checkbox:disabled {
+    opacity: 1;
+    cursor: pointer !important;
+}
+
+.task-list-item {
+    display: flex;
+    align-items: flex-start;
+    padding: 2px 0;
+    margin: 0;
+    transition: opacity 0.3s ease, text-decoration 0.3s ease;
+    list-style: none !important;
+    line-height: 1.5;
+    flex-wrap: wrap;
+}
+
+.task-list-item input[type="checkbox"] {
+    flex-shrink: 0;
+}
+
+/* Text content next to checkbox */
+.task-list-item > label {
+    flex: 1;
+    margin: 0;
+}
+
+/* Force nested lists to break to new line */
+.task-list-item > ul,
+.task-list-item > ol {
+    flex-basis: 100%;
+    width: 100%;
+    margin-left: 24px;
+    margin-top: 4px;
+    padding-left: 20px;
+}
+
+.task-list-item.completed {
+    opacity: 0.6;
+    text-decoration: line-through;
+}
+
+/* Remove any paragraph margins inside task items */
+.task-list-item p {
+    margin: 0;
+    padding: 0;
+    display: inline;
 }
 
 /*================================================================
