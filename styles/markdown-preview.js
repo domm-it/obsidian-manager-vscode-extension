@@ -156,8 +156,23 @@
     /*================================================================
     // region - HEADER ACCORDIONS
     ================================================================*/
+    // Simple hash function for accordion IDs
+    function simpleHash(str) {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            const char = str.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // Convert to 32bit integer
+        }
+        return Math.abs(hash).toString(36);
+    }
+    
     function enhanceHeaderAccordions() {
         try {
+            // Get file path from base tag for unique storage key
+            const baseTag = document.querySelector('base');
+            const filePath = baseTag ? baseTag.href : 'unknown';
+            
             // Find all headers that aren't already enhanced
             const headers = document.querySelectorAll('h1:not([data-accordion-enhanced]), h2:not([data-accordion-enhanced]), h3:not([data-accordion-enhanced]), h4:not([data-accordion-enhanced]), h5:not([data-accordion-enhanced]), h6:not([data-accordion-enhanced])');
             
@@ -189,9 +204,26 @@
                 
                 // Only add accordion if there's content
                 if (content.length > 0) {
+                    // Create unique ID for this accordion using hash
+                    const headerText = header.textContent.trim();
+                    const rawId = `${filePath}_${level}_${headerText}`;
+                    const accordionId = `accordion_${simpleHash(rawId)}`;
+                    
+                    // Check localStorage: if key exists, it's closed; otherwise it's open (default)
+                    let isOpen = true;
+                    try {
+                        const exists = localStorage.getItem(accordionId);
+                        if (exists !== null) {
+                            isOpen = false; // Key exists = accordion is closed
+                        }
+                    } catch (e) {
+                        // localStorage might be disabled
+                    }
+                    
                     // Add accordion classes
                     header.classList.add('accordion-header');
-                    header.setAttribute('data-accordion-open', 'true');
+                    header.setAttribute('data-accordion-open', String(isOpen));
+                    header.setAttribute('data-accordion-id', accordionId);
                     
                     // Create arrow icon
                     const arrow = document.createElement('span');
@@ -202,7 +234,7 @@
                     // Wrap content in container
                     const wrapper = document.createElement('div');
                     wrapper.className = 'accordion-content';
-                    wrapper.setAttribute('data-accordion-open', 'true');
+                    wrapper.setAttribute('data-accordion-open', String(isOpen));
                     
                     content.forEach(el => {
                         wrapper.appendChild(el.cloneNode(true));
@@ -212,23 +244,46 @@
                     content.forEach(el => el.remove());
                     header.parentNode.insertBefore(wrapper, header.nextSibling);
                     
+                    // Apply initial state
+                    if (!isOpen) {
+                        wrapper.style.maxHeight = '0';
+                        wrapper.style.opacity = '0';
+                    } else {
+                        wrapper.style.opacity = '1';
+                    }
+                    
                     // Add click handler
                     header.addEventListener('click', function(e) {
                         e.preventDefault();
                         e.stopPropagation();
                         
-                        const isOpen = header.getAttribute('data-accordion-open') === 'true';
-                        const newState = !isOpen;
+                        const currentOpen = header.getAttribute('data-accordion-open') === 'true';
+                        const newState = !currentOpen;
                         
                         header.setAttribute('data-accordion-open', String(newState));
                         wrapper.setAttribute('data-accordion-open', String(newState));
                         
+                        // Save/remove state from localStorage
+                        try {
+                            if (newState) {
+                                // Opening: remove from localStorage
+                                localStorage.removeItem(accordionId);
+                            } else {
+                                // Closing: save to localStorage
+                                localStorage.setItem(accordionId, '1');
+                            }
+                        } catch (e) {
+                            // localStorage might be disabled
+                        }
+                        
                         if (newState) {
+                            wrapper.style.opacity = '1';
                             wrapper.style.maxHeight = wrapper.scrollHeight + 'px';
                             setTimeout(() => {
                                 wrapper.style.maxHeight = 'none';
                             }, 300);
                         } else {
+                            wrapper.style.opacity = '0';
                             wrapper.style.maxHeight = wrapper.scrollHeight + 'px';
                             setTimeout(() => {
                                 wrapper.style.maxHeight = '0';
