@@ -390,6 +390,59 @@ label {
 }
 
 /*================================================================
+# MARK: HEADER ACCORDIONS
+================================================================*/
+.accordion-header {
+    display: flex;
+    align-items: center;
+    position: relative;
+    user-select: none;
+    transition: color 0.2s ease;
+}
+
+.accordion-arrow {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    margin-right: 3px;
+    font-size: 16px;
+    transition: transform 0.2s ease, color 0.2s ease, opacity 0.2s ease;
+    opacity: 0.5;
+    color: var(--vscode-foreground);
+    vertical-align: middle;
+}
+
+/* Show arrow on hover */
+.accordion-header:hover .accordion-arrow {
+    opacity: 1;
+}
+
+/* Show arrow when closed with primary color */
+.accordion-header[data-accordion-open="false"] .accordion-arrow {
+    opacity: 1;
+    color: var(--vscode-textLink-foreground, #4EC9B0);
+    transform: rotate(-90deg);
+    transform-origin: center center;
+}
+
+/* Rotate arrow when open (only visible on hover) */
+.accordion-header[data-accordion-open="true"]:hover .accordion-arrow {
+    transform: rotate(0deg);
+    transform-origin: center center;
+}
+
+.accordion-content {
+    overflow: hidden;
+    transition: max-height 0.3s ease, opacity 0.3s ease;
+    opacity: 1;
+}
+
+.accordion-content[data-accordion-open="false"] {
+    max-height: 0 !important;
+    opacity: 0;
+}
+
+/*================================================================
 # MARK: HASHTAGS
 ================================================================*/
 .hashtag {

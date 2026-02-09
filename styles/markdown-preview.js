@@ -131,6 +131,8 @@
             enhanceHashtags();
             
             enhanceTaskCheckboxes();
+            
+            enhanceHeaderAccordions();
 
         } catch (e) {
             console.warn('Error in initializeMarkdownEnhancements:', e);
@@ -148,6 +150,98 @@
                     });
                 }
             }, 100);
+        }
+    }
+
+    /*================================================================
+    // region - HEADER ACCORDIONS
+    ================================================================*/
+    function enhanceHeaderAccordions() {
+        try {
+            // Find all headers that aren't already enhanced
+            const headers = document.querySelectorAll('h1:not([data-accordion-enhanced]), h2:not([data-accordion-enhanced]), h3:not([data-accordion-enhanced]), h4:not([data-accordion-enhanced]), h5:not([data-accordion-enhanced]), h6:not([data-accordion-enhanced])');
+            
+            headers.forEach(header => {
+                // Mark as enhanced
+                header.setAttribute('data-accordion-enhanced', 'true');
+                
+                // Get header level (1-6)
+                const level = parseInt(header.tagName.substring(1));
+                
+                // Find content until next header of same or higher level
+                const content = [];
+                let sibling = header.nextElementSibling;
+                
+                while (sibling) {
+                    const siblingTag = sibling.tagName;
+                    
+                    // Stop if we hit a header of same or higher level (lower number)
+                    if (/^H[1-6]$/.test(siblingTag)) {
+                        const siblingLevel = parseInt(siblingTag.substring(1));
+                        if (siblingLevel <= level) {
+                            break;
+                        }
+                    }
+                    
+                    content.push(sibling);
+                    sibling = sibling.nextElementSibling;
+                }
+                
+                // Only add accordion if there's content
+                if (content.length > 0) {
+                    // Add accordion classes
+                    header.classList.add('accordion-header');
+                    header.setAttribute('data-accordion-open', 'true');
+                    
+                    // Create arrow icon
+                    const arrow = document.createElement('span');
+                    arrow.className = 'accordion-arrow';
+                    arrow.innerHTML = '▼';
+                    header.insertBefore(arrow, header.firstChild);
+                    
+                    // Wrap content in container
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'accordion-content';
+                    wrapper.setAttribute('data-accordion-open', 'true');
+                    
+                    content.forEach(el => {
+                        wrapper.appendChild(el.cloneNode(true));
+                    });
+                    
+                    // Remove original content and insert wrapper
+                    content.forEach(el => el.remove());
+                    header.parentNode.insertBefore(wrapper, header.nextSibling);
+                    
+                    // Add click handler
+                    header.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        
+                        const isOpen = header.getAttribute('data-accordion-open') === 'true';
+                        const newState = !isOpen;
+                        
+                        header.setAttribute('data-accordion-open', String(newState));
+                        wrapper.setAttribute('data-accordion-open', String(newState));
+                        
+                        if (newState) {
+                            wrapper.style.maxHeight = wrapper.scrollHeight + 'px';
+                            setTimeout(() => {
+                                wrapper.style.maxHeight = 'none';
+                            }, 300);
+                        } else {
+                            wrapper.style.maxHeight = wrapper.scrollHeight + 'px';
+                            setTimeout(() => {
+                                wrapper.style.maxHeight = '0';
+                            }, 10);
+                        }
+                    });
+                    
+                    // Set cursor pointer
+                    header.style.cursor = 'pointer';
+                }
+            });
+        } catch (e) {
+            // Silent fail
         }
     }
 
