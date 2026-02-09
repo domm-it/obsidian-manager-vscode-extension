@@ -90,6 +90,18 @@
         "icon": "$(table)"
       },
       {
+        "command": "obsidianManager.convertCheckboxToList",
+        "title": "Convert Checkboxes to List Items",
+        "category": "Obsidian manager",
+        "icon": "$(list-unordered)"
+      },
+      {
+        "command": "obsidianManager.convertListToCheckbox",
+        "title": "Convert List Items to Checkboxes",
+        "category": "Obsidian manager",
+        "icon": "$(checklist)"
+      },
+      {
         "command": "obsidianManager.pasteAsLink",
         "title": "Obsidian > Paste as link",
         "category": "Obsidian manager",
@@ -302,6 +314,16 @@
         },
         {
           "command": "obsidianManager.filterTasksByFile",
+          "when": "resourceExtname == .md || editorLangId == markdown",
+          "group": "navigation"
+        },
+        {
+          "command": "obsidianManager.convertCheckboxToList",
+          "when": "resourceExtname == .md || editorLangId == markdown",
+          "group": "navigation"
+        },
+        {
+          "command": "obsidianManager.convertListToCheckbox",
           "when": "resourceExtname == .md || editorLangId == markdown",
           "group": "navigation"
         },

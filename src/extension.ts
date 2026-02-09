@@ -11,6 +11,28 @@ import type MarkdownIt from 'markdown-it';
 // Drag & Drop controller state (last dragged items). We'll record last dragged sources in memory
 let _lastDragged: any[] = [];
 
+// Helper function to get current document URI (works in both edit and preview mode)
+function getCurrentDocumentUri(): vscode.Uri | undefined {
+  // First try active text editor
+  if (vscode.window.activeTextEditor) {
+    return vscode.window.activeTextEditor.document.uri;
+  }
+  
+  // If no active editor, check if there's a markdown preview tab active
+  const activeTab = vscode.window.tabGroups.activeTabGroup?.activeTab;
+  if (activeTab?.input instanceof vscode.TabInputText) {
+    return activeTab.input.uri;
+  } else if (activeTab?.input instanceof vscode.TabInputCustom) {
+    // Handle markdown preview
+    const uri = (activeTab.input as any).uri;
+    if (uri) {
+      return uri;
+    }
+  }
+  
+  return undefined;
+}
+
 // Helper function to safely show markdown preview by preloading the document first
 async function showMarkdownPreviewSafe(uri: vscode.Uri): Promise<void> {
   try {
@@ -1599,18 +1621,20 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Command to duplicate current active file from editor
   const duplicateFromEditorCmd = vscode.commands.registerCommand('obsidianManager.duplicateFromEditor', async () => {
-    const activeEditor = vscode.window.activeTextEditor;
-    if (!activeEditor) {
+    // Get current document URI (works in both edit and preview mode)
+    const uri = getCurrentDocumentUri();
+    if (!uri) {
       vscode.window.showInformationMessage('No active file to duplicate');
       return;
     }
 
-    const document = activeEditor.document;
-    if (!document.fileName.endsWith('.md')) {
+    if (!uri.fsPath.endsWith('.md')) {
       vscode.window.showInformationMessage('Duplicate command is only available for markdown files');
       return;
     }
 
+    // Open the document to ensure it's loaded
+    const document = await vscode.workspace.openTextDocument(uri);
     const originalPath = document.fileName;
     const originalDir = path.dirname(originalPath);
     const originalExt = path.extname(originalPath);
@@ -2590,6 +2614,158 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   });
   context.subscriptions.push(showTaskTableForProjectCmd);
+
+  // Command to convert checkboxes to list items
+  const convertCheckboxToListCmd = vscode.commands.registerCommand('obsidianManager.convertCheckboxToList', async () => {
+    try {
+      // Get current document URI (works in both edit and preview mode)
+      const uri = getCurrentDocumentUri();
+      if (!uri) {
+        vscode.window.showErrorMessage('No active markdown file found.');
+        return;
+      }
+
+      // Check if current file is markdown
+      if (!uri.fsPath.endsWith('.md')) {
+        vscode.window.showErrorMessage('This command is only available for Markdown files.');
+        return;
+      }
+
+      // Open document
+      const document = await vscode.workspace.openTextDocument(uri);
+      const fullText = document.getText();
+      const lines = fullText.split('\n');
+      
+      // Check if we're in preview mode (no active text editor for this document)
+      const isInPreview = !vscode.window.activeTextEditor || 
+                          vscode.window.activeTextEditor.document.uri.toString() !== uri.toString();
+      
+      if (isInPreview) {
+        // Use WorkspaceEdit to modify the document without opening editor
+        const edit = new vscode.WorkspaceEdit();
+        
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          // Match lines with checkboxes: - [ ] or - [x] or - [X]
+          const checkboxMatch = line.match(/^(\s*)-\s*\[([ xX])\]\s*(.*)$/);
+          
+          if (checkboxMatch) {
+            const indent = checkboxMatch[1];
+            const content = checkboxMatch[3];
+            const newLine = `${indent}- ${content}`;
+            
+            const lineRange = new vscode.Range(
+              new vscode.Position(i, 0),
+              new vscode.Position(i, line.length)
+            );
+            edit.replace(uri, lineRange, newLine);
+          }
+        }
+        
+        await vscode.workspace.applyEdit(edit);
+      } else {
+        // We're in editor mode, use the editor API
+        const editor = vscode.window.activeTextEditor!;
+        await editor.edit(editBuilder => {
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const checkboxMatch = line.match(/^(\s*)-\s*\[([ xX])\]\s*(.*)$/);
+            
+            if (checkboxMatch) {
+              const indent = checkboxMatch[1];
+              const content = checkboxMatch[3];
+              const newLine = `${indent}- ${content}`;
+              
+              const lineRange = new vscode.Range(
+                new vscode.Position(i, 0),
+                new vscode.Position(i, line.length)
+              );
+              editBuilder.replace(lineRange, newLine);
+            }
+          }
+        });
+      }
+    } catch (err) {
+      vscode.window.showErrorMessage(`Error converting checkboxes: ${String(err)}`);
+    }
+  });
+  context.subscriptions.push(convertCheckboxToListCmd);
+
+  // Command to convert list items to checkboxes
+  const convertListToCheckboxCmd = vscode.commands.registerCommand('obsidianManager.convertListToCheckbox', async () => {
+    try {
+      // Get current document URI (works in both edit and preview mode)
+      const uri = getCurrentDocumentUri();
+      if (!uri) {
+        vscode.window.showErrorMessage('No active markdown file found.');
+        return;
+      }
+
+      // Check if current file is markdown
+      if (!uri.fsPath.endsWith('.md')) {
+        vscode.window.showErrorMessage('This command is only available for Markdown files.');
+        return;
+      }
+
+      // Open document
+      const document = await vscode.workspace.openTextDocument(uri);
+      const fullText = document.getText();
+      const lines = fullText.split('\n');
+      
+      // Check if we're in preview mode (no active text editor for this document)
+      const isInPreview = !vscode.window.activeTextEditor || 
+                          vscode.window.activeTextEditor.document.uri.toString() !== uri.toString();
+      
+      if (isInPreview) {
+        // Use WorkspaceEdit to modify the document without opening editor
+        const edit = new vscode.WorkspaceEdit();
+        
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          // Match lines with regular list items (but not already checkboxes)
+          const listMatch = line.match(/^(\s*)-\s+(?!\[([ xX])\])(.+)$/);
+          
+          if (listMatch) {
+            const indent = listMatch[1];
+            const content = listMatch[3];
+            const newLine = `${indent}- [ ] ${content}`;
+            
+            const lineRange = new vscode.Range(
+              new vscode.Position(i, 0),
+              new vscode.Position(i, line.length)
+            );
+            edit.replace(uri, lineRange, newLine);
+          }
+        }
+        
+        await vscode.workspace.applyEdit(edit);
+      } else {
+        // We're in editor mode, use the editor API
+        const editor = vscode.window.activeTextEditor!;
+        await editor.edit(editBuilder => {
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const listMatch = line.match(/^(\s*)-\s+(?!\[([ xX])\])(.+)$/);
+            
+            if (listMatch) {
+              const indent = listMatch[1];
+              const content = listMatch[3];
+              const newLine = `${indent}- [ ] ${content}`;
+              
+              const lineRange = new vscode.Range(
+                new vscode.Position(i, 0),
+                new vscode.Position(i, line.length)
+              );
+              editBuilder.replace(lineRange, newLine);
+            }
+          }
+        });
+      }
+    } catch (err) {
+      vscode.window.showErrorMessage(`Error converting to checkboxes: ${String(err)}`);
+    }
+  });
+  context.subscriptions.push(convertListToCheckboxCmd);
 
   // Filter Task Table by specific file
   const filterTasksByFileCmd = vscode.commands.registerCommand('obsidianManager.filterTasksByFile', async (...args: any[]) => {
