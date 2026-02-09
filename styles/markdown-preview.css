@@ -141,7 +141,7 @@ input[type="checkbox"].task-list-item-checkbox:disabled {
 /* Wrapper for checkbox and label */
 .task-checkbox-wrapper {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 4px;
     flex: 1;
     min-width: 0;
@@ -159,6 +159,10 @@ input[type="checkbox"].task-list-item-checkbox:disabled {
     margin: 0;
     line-height: 1.6;
     min-width: 0;
+}
+
+.task-checkbox-wrapper > input[type="checkbox"] {
+    margin-top: 2px;
 }
 
 /* Code blocks within task items should appear on new line */
