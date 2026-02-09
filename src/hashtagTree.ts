@@ -100,17 +100,23 @@ export class HashtagTreeProvider implements vscode.TreeDataProvider<HashtagNode>
     }
   }
 
-  private async scanForHashtags(dir: string): Promise<void> {
+  private async scanForHashtags(dir: string, depth: number = 0): Promise<void> {
+    // Safety check: prevent infinite recursion
+    if (depth > 50) {
+      return;
+    }
+    
     try {
       const entries = await fs.readdir(dir, { withFileTypes: true });
       
       for (const entry of entries) {
+        // Skip hidden files/folders and special folders
         if (entry.name.startsWith('.') || entry.name === '@eaDir') continue;
         
         const fullPath = path.join(dir, entry.name);
         
         if (entry.isDirectory()) {
-          await this.scanForHashtags(fullPath);
+          await this.scanForHashtags(fullPath, depth + 1);
         } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) {
           // Only process files with date prefix (YYYY-MM-DD)
           const datePattern = /^\d{4}-\d{2}-\d{2}/;

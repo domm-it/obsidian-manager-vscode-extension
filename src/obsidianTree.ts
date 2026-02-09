@@ -201,17 +201,24 @@ export class ObsidianTreeProvider implements vscode.TreeDataProvider<ObsidianNod
     this.refresh();
   }
 
-  private async scanDirIntoCache(dir: string): Promise<void> {
+  private async scanDirIntoCache(dir: string, depth: number = 0): Promise<void> {
+    // Safety check: prevent infinite recursion
+    if (depth > 50) {
+      return;
+    }
+    
     try {
       const entries = await fs.readdir(dir, { withFileTypes: true });
       const nodes: ObsidianNode[] = [];
       for (const e of entries) {
+        // Skip hidden files/folders and special folders
         if (e.name.startsWith('.') || e.name === '@eaDir') continue;
+        
         const full = path.join(dir, e.name);
         if (e.isDirectory()) {
           nodes.push({ resourceUri: vscode.Uri.file(full), isDirectory: true });
-          // Recursively preload children
-          await this.scanDirIntoCache(full);
+          // Recursively preload children with incremented depth
+          await this.scanDirIntoCache(full, depth + 1);
         } else if (e.isFile() && e.name.toLowerCase().endsWith('.md')) {
           nodes.push({ resourceUri: vscode.Uri.file(full), isDirectory: false });
         }

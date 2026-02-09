@@ -185,6 +185,19 @@ class ObsidianDragAndDropController implements vscode.TreeDragAndDropController<
         const srcPath = s.resourceUri.fsPath;
         const base = path.basename(srcPath);
         let destPath = path.join(destFolder, base);
+        
+        // Check if trying to move a directory into itself or its subdirectory
+        if (s.isDirectory) {
+          const normalizedSrc = path.normalize(srcPath);
+          const normalizedDest = path.normalize(destFolder);
+          
+          // Check if destination is the same as source or is a subdirectory of source
+          if (normalizedDest === normalizedSrc || normalizedDest.startsWith(normalizedSrc + path.sep)) {
+            vscode.window.showErrorMessage(`Cannot move "${base}" into itself or its subdirectory.`);
+            continue;
+          }
+        }
+        
         // If dest exists, ask what to do
         let destExists = false;
         try { await fs.access(destPath); destExists = true; } catch (e) { destExists = false; }
@@ -296,6 +309,18 @@ class ObsidianDragAndDropController implements vscode.TreeDragAndDropController<
           vscode.window.showWarningMessage(`Cannot copy "${fileName}": unsupported file type (socket, pipe, or device file)`);
           continue;
         }
+        
+        // Check if trying to copy a directory into itself or its subdirectory
+        if (sourceStats.isDirectory()) {
+          const normalizedSrc = path.normalize(sourcePath);
+          const normalizedDest = path.normalize(destFolder);
+          
+          // Check if destination is the same as source or is a subdirectory of source
+          if (normalizedDest === normalizedSrc || normalizedDest.startsWith(normalizedSrc + path.sep)) {
+            vscode.window.showErrorMessage(`Cannot copy "${fileName}" into itself or its subdirectory.`);
+            continue;
+          }
+        }
 
         // Handle filename conflicts
         let destExists = false;
@@ -367,7 +392,12 @@ class ObsidianDragAndDropController implements vscode.TreeDragAndDropController<
   }
 
   // Recursively copy a directory and its contents
-  private async copyDirectory(sourcePath: string, destPath: string): Promise<void> {
+  private async copyDirectory(sourcePath: string, destPath: string, depth: number = 0): Promise<void> {
+    // Safety check: prevent infinite recursion
+    if (depth > 50) {
+      throw new Error('Maximum directory depth exceeded (possible infinite loop)');
+    }
+    
     // Create destination directory
     await fs.mkdir(destPath, { recursive: true });
 
@@ -376,12 +406,17 @@ class ObsidianDragAndDropController implements vscode.TreeDragAndDropController<
 
     // Copy each entry
     for (const entry of entries) {
+      // Skip hidden files and system folders
+      if (entry.name.startsWith('.')) {
+        continue;
+      }
+      
       const sourceEntryPath = path.join(sourcePath, entry.name);
       const destEntryPath = path.join(destPath, entry.name);
 
       if (entry.isDirectory()) {
-        // Recursively copy subdirectory
-        await this.copyDirectory(sourceEntryPath, destEntryPath);
+        // Recursively copy subdirectory with incremented depth
+        await this.copyDirectory(sourceEntryPath, destEntryPath, depth + 1);
       } else if (entry.isFile()) {
         // Copy file
         await fs.copyFile(sourceEntryPath, destEntryPath);
@@ -822,6 +857,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const cfg = vscode.workspace.getConfiguration('obsidianManager');
   const vaultPath = cfg.get<string>('vault', '');
   let fileWatcher: vscode.FileSystemWatcher | undefined;
+  let hashtagRefreshTimeout: NodeJS.Timeout | undefined;
   
   const setupFileWatcher = () => {
     if (fileWatcher) {
@@ -833,21 +869,25 @@ export async function activate(context: vscode.ExtensionContext) {
       const pattern = new vscode.RelativePattern(currentVaultPath, '**/*.md');
       fileWatcher = vscode.workspace.createFileSystemWatcher(pattern);
       
+      // Debounced refresh function to prevent multiple rapid refreshes
+      const debouncedRefresh = () => {
+        // Calendar refresh (already has its own debounce)
+        vscode.commands.executeCommand('obsidianManager.refreshCalendar');
+        
+        // Hashtags refresh with debounce
+        if (hashtagRefreshTimeout) {
+          clearTimeout(hashtagRefreshTimeout);
+        }
+        hashtagRefreshTimeout = setTimeout(() => {
+          vscode.commands.executeCommand('obsidianManager.refreshHashtags');
+          hashtagRefreshTimeout = undefined;
+        }, 500); // 500ms debounce for hashtags
+      };
+      
       // Refresh calendar and hashtags when files are created, changed, or deleted
-      fileWatcher.onDidCreate(() => {
-        vscode.commands.executeCommand('obsidianManager.refreshCalendar');
-        vscode.commands.executeCommand('obsidianManager.refreshHashtags');
-      });
-      
-      fileWatcher.onDidChange(() => {
-        vscode.commands.executeCommand('obsidianManager.refreshCalendar');
-        vscode.commands.executeCommand('obsidianManager.refreshHashtags');
-      });
-      
-      fileWatcher.onDidDelete(() => {
-        vscode.commands.executeCommand('obsidianManager.refreshCalendar');
-        vscode.commands.executeCommand('obsidianManager.refreshHashtags');
-      });
+      fileWatcher.onDidCreate(debouncedRefresh);
+      fileWatcher.onDidChange(debouncedRefresh);
+      fileWatcher.onDidDelete(debouncedRefresh);
       
       context.subscriptions.push(fileWatcher);
     }
@@ -945,6 +985,12 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Create calendar webview
   let currentCalendarView: vscode.WebviewView | undefined;
+  let calendarRefreshTimeout: NodeJS.Timeout | undefined;
+  const now = new Date();
+  let currentCalendarYear: number = now.getFullYear();
+  let currentCalendarMonth: number = now.getMonth();
+  let calendarUpdateFunction: ((year: number, month: number) => Promise<void>) | undefined;
+  
   const calendarViewProvider = vscode.window.registerWebviewViewProvider('obsidianCalendar', {
     resolveWebviewView(webviewView: vscode.WebviewView) {
       currentCalendarView = webviewView;
@@ -984,10 +1030,20 @@ export async function activate(context: vscode.ExtensionContext) {
         const filesInFolder = new Set<string>();
         const filePathsMap = new Map<string, string[]>(); // Map date to array of full file paths
         if (vaultPath) {
-          const scanFolderRecursively = async (dirPath: string): Promise<void> => {
+          const scanFolderRecursively = async (dirPath: string, depth: number = 0): Promise<void> => {
+            // Safety check: prevent infinite recursion
+            if (depth > 50) {
+              return;
+            }
+            
             try {
               const entries = await fs.readdir(dirPath, { withFileTypes: true });
               for (const entry of entries) {
+                // Skip hidden files and folders
+                if (entry.name.startsWith('.')) {
+                  continue;
+                }
+                
                 if (entry.isFile() && entry.name.endsWith('.md')) {
                   const dateMatch = entry.name.match(/^(\d{4}-\d{2}-\d{2})/);
                   if (dateMatch) {
@@ -999,8 +1055,8 @@ export async function activate(context: vscode.ExtensionContext) {
                     }
                     filePathsMap.get(dateStr)!.push(path.join(dirPath, entry.name));
                   }
-                } else if (entry.isDirectory() && !entry.name.startsWith('.')) {
-                  await scanFolderRecursively(path.join(dirPath, entry.name));
+                } else if (entry.isDirectory()) {
+                  await scanFolderRecursively(path.join(dirPath, entry.name), depth + 1);
                 }
               }
             } catch (e) {
@@ -1057,11 +1113,9 @@ export async function activate(context: vscode.ExtensionContext) {
         
         calendarHtml += '</div>';
         
-        // Send updated file paths map to webview
-        webviewView.webview.postMessage({
-          command: 'updateFilePathsMap',
-          filePathsMap: Object.fromEntries(filePathsMap)
-        });
+        // Store current year and month for refresh
+        currentCalendarYear = year;
+        currentCalendarMonth = month;
 
         webviewView.webview.html = `<!DOCTYPE html>
 <html>
@@ -1208,27 +1262,6 @@ export async function activate(context: vscode.ExtensionContext) {
             });
         }
         
-
-        
-        function updateFilePathsMap(newMap) {
-            filePathsMap = newMap;
-        }
-        
-        // Listen for messages from extension
-        window.addEventListener('message', event => {
-            const message = event.data;
-            if (message.command === 'updateFilePathsMap') {
-                updateFilePathsMap(message.filePathsMap);
-            } else if (message.command === 'refreshCalendar') {
-                // Refresh calendar
-                vscode.postMessage({ 
-                    command: 'updateCalendar', 
-                    year: currentYear, 
-                    month: currentMonth 
-                });
-            }
-        });
-        
         function dayClicked(dateStr) {
             const existingFilePaths = filePathsMap[dateStr];
             vscode.postMessage({ 
@@ -1241,6 +1274,9 @@ export async function activate(context: vscode.ExtensionContext) {
 </body>
 </html>`;
       };
+      
+      // Store update function reference
+      calendarUpdateFunction = updateCalendar;
 
       // Initialize with current month
       const now = new Date();
@@ -1379,16 +1415,22 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   context.subscriptions.push(calendarViewProvider);
 
-  // Command to refresh calendar
+  // Command to refresh calendar with debounce to prevent multiple rapid updates
   const refreshCalendarCmd = vscode.commands.registerCommand('obsidianManager.refreshCalendar', () => {
-    if (currentCalendarView) {
-      // Refresh calendar with current view state
-      const now = new Date();
-      currentCalendarView.webview.postMessage({
-        command: 'refreshCalendar',
-        year: now.getFullYear(),
-        month: now.getMonth()
-      });
+    if (currentCalendarView && calendarUpdateFunction) {
+      // Clear any pending refresh
+      if (calendarRefreshTimeout) {
+        clearTimeout(calendarRefreshTimeout);
+      }
+      
+      // Debounce refresh to avoid multiple rapid updates  
+      calendarRefreshTimeout = setTimeout(async () => {
+        if (currentCalendarView && calendarUpdateFunction) {
+          // Call updateCalendar directly with current view state
+          await calendarUpdateFunction(currentCalendarYear, currentCalendarMonth);
+        }
+        calendarRefreshTimeout = undefined;
+      }, 300); // 300ms debounce
     }
   });
   context.subscriptions.push(refreshCalendarCmd);
@@ -2183,17 +2225,25 @@ export async function activate(context: vscode.ExtensionContext) {
       }, async (progress) => {
         
         // Function to recursively search for today's files
-        const findTodayFiles = async (dirPath: string): Promise<string[]> => {
+        const findTodayFiles = async (dirPath: string, depth: number = 0): Promise<string[]> => {
+          // Safety check: prevent infinite recursion
+          if (depth > 50) {
+            return [];
+          }
+          
           const foundFiles: string[] = [];
           try {
             const entries = await fs.readdir(dirPath, { withFileTypes: true });
             
             for (const entry of entries) {
+              // Skip hidden files/folders
+              if (entry.name.startsWith('.')) continue;
+              
               const fullPath = path.join(dirPath, entry.name);
               
               if (entry.isDirectory()) {
-                // Recursively search in subdirectories
-                const subFiles = await findTodayFiles(fullPath);
+                // Recursively search in subdirectories with incremented depth
+                const subFiles = await findTodayFiles(fullPath, depth + 1);
                 foundFiles.push(...subFiles);
               } else if (entry.isFile() && entry.name.endsWith('.md')) {
                 // Check if filename contains today's date

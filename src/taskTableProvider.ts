@@ -95,6 +95,12 @@ export class TaskTableProvider {
               }
               break;
             
+            case 'moveTask':
+              if (message.taskId) {
+                await this.moveTask(message.taskId);
+              }
+              break;
+            
             case 'editTags':
               if (message.taskId) {
                 await this.editTaskTags(message.taskId);
@@ -201,9 +207,14 @@ export class TaskTableProvider {
     }
   }
 
-  private async findDatePrefixedMarkdownFiles(dir: string, rootDir: string = ''): Promise<string[]> {
+  private async findDatePrefixedMarkdownFiles(dir: string, rootDir: string = '', depth: number = 0): Promise<string[]> {
     if (!rootDir) {
       rootDir = dir;
+    }
+
+    // Safety check: prevent infinite recursion
+    if (depth > 50) {
+      return [];
     }
 
     const files: string[] = [];
@@ -212,11 +223,14 @@ export class TaskTableProvider {
       const entries = await fs.readdir(dir, { withFileTypes: true });
       
       for (const entry of entries) {
+        // Skip hidden files/folders
+        if (entry.name.startsWith('.')) continue;
+        
         const fullPath = path.join(dir, entry.name);
         
         if (entry.isDirectory()) {
-          // Recursively search subdirectories
-          const subFiles = await this.findDatePrefixedMarkdownFiles(fullPath, rootDir);
+          // Recursively search subdirectories with incremented depth
+          const subFiles = await this.findDatePrefixedMarkdownFiles(fullPath, rootDir, depth + 1);
           files.push(...subFiles);
         } else if (entry.isFile() && entry.name.endsWith('.md')) {
           // Check if filename starts with YYYY-MM-DD pattern
@@ -461,6 +475,249 @@ export class TaskTableProvider {
       
     } catch (error) {
       vscode.window.showErrorMessage(`Error adding task: ${error}`);
+    }
+  }
+
+  private async moveTask(taskId: string) {
+    const task = this.tasks.find(t => t.id === taskId);
+    if (!task) {
+      return;
+    }
+
+    try {
+      const cfg = vscode.workspace.getConfiguration('obsidianManager');
+      
+      // Read source file
+      const content = await fs.readFile(task.filePath, 'utf-8');
+      const lines = content.split('\n');
+      
+      // Collect the task with its children (indented lines)
+      const taskLines: string[] = [lines[task.lineNumber]];
+      const taskMatch = lines[task.lineNumber].match(/^(\s*)-\s*\[([ xX])\]/);
+      if (!taskMatch) {
+        vscode.window.showErrorMessage('Invalid task format');
+        return;
+      }
+      
+      const taskIndent = taskMatch[1].length;
+      
+      // Collect all subsequent lines that are more indented (children)
+      let j = task.lineNumber + 1;
+      while (j < lines.length) {
+        const nextLine = lines[j];
+        
+        // Empty lines are included if they're between indented content
+        if (nextLine.trim() === '') {
+          // Check if there's more indented content after this empty line
+          let k = j + 1;
+          let hasMoreIndentedContent = false;
+          while (k < lines.length && lines[k].trim() === '') k++;
+          if (k < lines.length) {
+            const nextNonEmptyLine = lines[k];
+            const nextIndentMatch = nextNonEmptyLine.match(/^(\s*)/);
+            if (nextIndentMatch && nextIndentMatch[1].length > taskIndent) {
+              hasMoreIndentedContent = true;
+            }
+          }
+          if (hasMoreIndentedContent) {
+            taskLines.push(nextLine);
+            j++;
+            continue;
+          } else {
+            break;
+          }
+        }
+        
+        // Check indentation of non-empty line
+        const indentMatch = nextLine.match(/^(\s*)/)!;
+        const nextIndent = indentMatch[1].length;
+        
+        // If more indented than parent task, it's a child
+        if (nextIndent > taskIndent) {
+          taskLines.push(nextLine);
+          j++;
+        } else {
+          // Equal or less indentation - not a child
+          break;
+        }
+      }
+      
+      // Get all markdown files
+      const allFiles: string[] = [];
+      
+      async function scanDirectory(dir: string, depth: number = 0) {
+        // Safety check: prevent infinite recursion
+        if (depth > 50) {
+          return;
+        }
+        
+        try {
+          const entries = await fs.readdir(dir, { withFileTypes: true });
+          for (const entry of entries) {
+            // Skip hidden files and folders
+            if (entry.name.startsWith('.')) {
+              continue;
+            }
+            
+            const fullPath = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+              await scanDirectory(fullPath, depth + 1);
+            } else if (entry.isFile() && entry.name.endsWith('.md')) {
+              allFiles.push(fullPath);
+            }
+          }
+        } catch (e) {
+          // Ignore errors
+        }
+      }
+      
+      await scanDirectory(this.vaultPath);
+      
+      // Create quick pick items
+      const quickPickItems: vscode.QuickPickItem[] = [];
+      
+      // Add "Create new file" as first option
+      quickPickItems.push({
+        label: '$(file-add) Create new file',
+        description: 'Create a new markdown file and move task to it',
+        detail: '__CREATE_NEW__'
+      });
+      
+      // Add separator if there are existing files
+      if (allFiles.length > 0) {
+        quickPickItems.push({
+          label: '',
+          description: '─────────────────────────',
+          detail: '__SEPARATOR__',
+          kind: vscode.QuickPickItemKind.Separator
+        });
+        
+        // Add existing files (exclude current file)
+        allFiles.forEach(file => {
+          if (file !== task.filePath) {
+            const relativePath = path.relative(this.vaultPath, file);
+            const fileName = path.basename(file, '.md');
+            
+            quickPickItems.push({
+              label: fileName,
+              description: relativePath,
+              detail: file
+            });
+          }
+        });
+        
+        // Sort existing files by name
+        const filesToSort = quickPickItems.slice(2);
+        filesToSort.sort((a, b) => a.label.localeCompare(b.label));
+        quickPickItems.splice(2, filesToSort.length, ...filesToSort);
+      }
+      
+      // Show quick pick dialog
+      const selectedItem = await vscode.window.showQuickPick(quickPickItems, {
+        placeHolder: 'Move task to...',
+        matchOnDescription: true,
+        matchOnDetail: true
+      });
+      
+      if (!selectedItem || selectedItem.detail === '__SEPARATOR__') {
+        return;
+      }
+      
+      let targetFilePath: string;
+      
+      if (selectedItem.detail === '__CREATE_NEW__') {
+        // Create new file workflow
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        const todayString = `${year}-${month}-${day}`;
+        
+        const newFileInput = await vscode.window.showInputBox({
+          prompt: 'Enter file path (e.g., "folder/filename" or just "filename")',
+          value: todayString,
+          placeHolder: 'folder/filename or filename',
+          validateInput: (input) => {
+            if (!input || input.trim() === '') {
+              return 'Path cannot be empty';
+            }
+            if (/[<>:"|?*]/.test(input) || input.includes('\\')) {
+              return 'Path contains invalid characters';
+            }
+            return null;
+          }
+        });
+        
+        if (!newFileInput) {
+          return;
+        }
+        
+        const inputTrimmed = newFileInput.trim();
+        const fullFileName = inputTrimmed.endsWith('.md') ? inputTrimmed : `${inputTrimmed}.md`;
+        targetFilePath = path.join(this.vaultPath, fullFileName);
+        
+        // Create parent directories if they don't exist
+        const targetDir = path.dirname(targetFilePath);
+        try {
+          await fs.mkdir(targetDir, { recursive: true });
+        } catch (err) {
+          vscode.window.showErrorMessage(`Failed to create directory: ${String(err)}`);
+          return;
+        }
+        
+        // Check if file already exists
+        try {
+          await fs.access(targetFilePath);
+          const choice = await vscode.window.showQuickPick(['Append', 'Cancel'], { 
+            placeHolder: `File "${path.basename(targetFilePath)}" already exists. What would you like to do?` 
+          });
+          if (!choice || choice === 'Cancel') return;
+        } catch (e) {
+          // File doesn't exist, create it with title
+          const addTitle = cfg.get<boolean>('addTitleToNewFiles', true);
+          let initialContent = '';
+          if (addTitle) {
+            const fileNameWithoutExt = path.basename(targetFilePath, '.md');
+            initialContent = `# ${fileNameWithoutExt}\n\n`;
+          }
+          await fs.writeFile(targetFilePath, initialContent);
+        }
+      } else {
+        targetFilePath = selectedItem.detail!;
+      }
+      
+      // Read target file content
+      let targetContent = await fs.readFile(targetFilePath, 'utf8');
+      
+      // Add context header
+      const sourceFileNameWithoutExt = path.basename(task.filePath, '.md');
+      const sourceRelativePath = path.relative(this.vaultPath, task.filePath);
+      const contextHeader = `\n\n## Moved from [[${sourceFileNameWithoutExt}]]\n\n`;
+      
+      // Append task to target file
+      const tasksText = taskLines.join('\n');
+      targetContent += contextHeader + tasksText + '\n';
+      await fs.writeFile(targetFilePath, targetContent);
+      
+      // Remove task from source file (delete all task lines including children)
+      lines.splice(task.lineNumber, taskLines.length);
+      await fs.writeFile(task.filePath, lines.join('\n'), 'utf-8');
+      
+      // Reload tasks and send updated data
+      await this.loadTasks();
+      this.sendTasksUpdate();
+      
+      // Refresh hashtags and tree
+      vscode.commands.executeCommand('obsidianManager.refreshHashtags');
+      vscode.commands.executeCommand('obsidianManager.refreshView');
+      
+      // Show success message
+      vscode.window.showInformationMessage(
+        `Task moved to ${path.basename(targetFilePath)}`
+      );
+      
+    } catch (error) {
+      vscode.window.showErrorMessage(`Error moving task: ${error}`);
     }
   }
 
@@ -1584,6 +1841,24 @@ export class TaskTableProvider {
       opacity: 1;
     }
     
+    .move-cell {
+      width: 40px;
+      min-width: 40px;
+      text-align: center;
+      padding: 4px !important;
+    }
+    
+    .move-icon {
+      cursor: pointer;
+      color: var(--vscode-foreground);
+      opacity: 0.6;
+      font-size: 16px !important;
+    }
+    
+    .move-icon:hover {
+      opacity: 1;
+    }
+    
     .insert-cell {
       width: 40px;
       min-width: 40px;
@@ -1767,6 +2042,7 @@ export class TaskTableProvider {
           <th class="project-cell sortable" data-column="project">PROJECT</th>
           <th class="task-cell">TASK</th>
           <th class="tags-cell">TAGS</th>
+          <th class="move-cell"></th>
           <th class="insert-cell"></th>
           <th class="actions-cell">
             <span class="codicon codicon-refresh reload-icon" title="Reload tasks"></span>
@@ -1799,6 +2075,9 @@ export class TaskTableProvider {
               </div>
             </td>
             <td class="tags-cell">${extractTags(task.task).map(tag => `<span class="tag" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}<span class="tag-remove">×</span></span>`).join('')}</td>
+            <td class="move-cell">
+              <span class="codicon codicon-arrow-right move-icon" title="Move task to another file"></span>
+            </td>
             <td class="insert-cell">
               <span class="codicon codicon-add add-icon" title="Add task after"></span>
             </td>
@@ -2092,6 +2371,21 @@ export class TaskTableProvider {
         }
       }
       
+      // Click on move icon
+      if (e.target.classList.contains('move-icon')) {
+        const row = e.target.closest('tr');
+        if (!row) return;
+        
+        const taskId = row.getAttribute('data-task-id');
+        
+        if (taskId) {
+          vscode.postMessage({
+            command: 'moveTask',
+            taskId: taskId
+          });
+        }
+      }
+      
       // Click on delete icon
       if (e.target.classList.contains('delete-icon')) {
         const row = e.target.closest('tr');
@@ -2209,6 +2503,9 @@ export class TaskTableProvider {
             </div>
           </td>
           <td class="tags-cell">\${tagsHtml}</td>
+          <td class="move-cell">
+            <span class="codicon codicon-arrow-right move-icon" title="Move task to another file"></span>
+          </td>
           <td class="insert-cell">
             <span class="codicon codicon-add add-icon" title="Add task after"></span>
           </td>
