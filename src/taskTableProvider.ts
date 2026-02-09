@@ -1971,7 +1971,7 @@ export class TaskTableProvider {
         </span>
         <div class="bulk-actions-buttons">
           <button id="bulkMoveBtn" class="bulk-action-btn" title="Move selected tasks to another file">
-            Move
+            <span class="codicon codicon-arrow-right"></span>
           </button>
           <button id="bulkDeleteBtn" class="bulk-action-btn danger" title="Delete selected tasks">
             <span class="codicon codicon-trash"></span>
