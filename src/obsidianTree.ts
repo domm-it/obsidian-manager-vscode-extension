@@ -13,6 +13,7 @@ export class ObsidianTreeProvider implements vscode.TreeDataProvider<ObsidianNod
 
   private cache: Map<string, ObsidianNode[]> = new Map();
   private taskCache: Map<string, {completed: number, total: number, lastModified: number}> = new Map();
+  private taskCountPromises: Map<string, Promise<{completed: number, total: number}>> = new Map();
   private rootPath: string | undefined;
   private preloadPromise: Promise<void> | undefined;
 
@@ -32,17 +33,19 @@ export class ObsidianTreeProvider implements vscode.TreeDataProvider<ObsidianNod
   refresh(): void {
     // Clear task cache when refreshing to ensure task counts are updated
     this.taskCache.clear();
+    this.taskCountPromises.clear();
     this._onDidChangeTreeData.fire();
   }
 
   getTreeItem(element: ObsidianNode): vscode.TreeItem {
-    let label = path.basename(element.resourceUri.fsPath);
+    const baseName = path.basename(element.resourceUri.fsPath);
+    let label = baseName;
     
-    // Add task count for markdown files
+    // Add task count for markdown files (cached)
     if (!element.isDirectory && element.resourceUri.fsPath.toLowerCase().endsWith('.md')) {
-      const taskCount = this.getTaskCount(element.resourceUri.fsPath);
+      const taskCount = this.getTaskCountSync(element.resourceUri.fsPath);
       if (taskCount.total > 0) {
-        label = `${label} [${taskCount.completed}/${taskCount.total}]`;
+        label = `${baseName} [${taskCount.completed}/${taskCount.total}]`;
       }
     }
     
@@ -197,6 +200,7 @@ export class ObsidianTreeProvider implements vscode.TreeDataProvider<ObsidianNod
     this.preloadPromise = undefined;
     // Clear task cache to ensure fresh task counts
     this.taskCache.clear();
+    this.taskCountPromises.clear();
     await this.ensurePreloaded();
     this.refresh();
   }
@@ -210,6 +214,10 @@ export class ObsidianTreeProvider implements vscode.TreeDataProvider<ObsidianNod
     try {
       const entries = await fs.readdir(dir, { withFileTypes: true });
       const nodes: ObsidianNode[] = [];
+      const subdirs: string[] = [];
+      const mdFiles: string[] = [];
+      
+      // First pass: collect entries
       for (const e of entries) {
         // Skip hidden files/folders and special folders
         if (e.name.startsWith('.') || e.name === '@eaDir') continue;
@@ -217,17 +225,37 @@ export class ObsidianTreeProvider implements vscode.TreeDataProvider<ObsidianNod
         const full = path.join(dir, e.name);
         if (e.isDirectory()) {
           nodes.push({ resourceUri: vscode.Uri.file(full), isDirectory: true });
-          // Recursively preload children with incremented depth
-          await this.scanDirIntoCache(full, depth + 1);
+          subdirs.push(full);
         } else if (e.isFile() && e.name.toLowerCase().endsWith('.md')) {
           nodes.push({ resourceUri: vscode.Uri.file(full), isDirectory: false });
+          mdFiles.push(full);
         }
       }
+      
+      // Optimized sorting: directories first, then simple string comparison
       nodes.sort((a, b) => {
-        if (a.isDirectory === b.isDirectory) return a.resourceUri.fsPath.localeCompare(b.resourceUri.fsPath);
-        return a.isDirectory ? -1 : 1;
+        if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+        // Simple string comparison is faster than localeCompare for ASCII
+        const aPath = a.resourceUri.fsPath;
+        const bPath = b.resourceUri.fsPath;
+        return aPath < bPath ? -1 : aPath > bPath ? 1 : 0;
       });
+      
       this.cache.set(dir, nodes);
+      
+      // Preload task counts for .md files in parallel (batch operation)
+      if (mdFiles.length > 0) {
+        this.preloadTaskCounts(mdFiles);
+      }
+      
+      // Recursively preload subdirectories in parallel (but limit concurrency)
+      if (subdirs.length > 0) {
+        const batchSize = 5; // Process 5 directories at a time
+        for (let i = 0; i < subdirs.length; i += batchSize) {
+          const batch = subdirs.slice(i, i + batchSize);
+          await Promise.all(batch.map(subdir => this.scanDirIntoCache(subdir, depth + 1)));
+        }
+      }
     } catch (err) {
       // on error store empty to avoid repeated attempts
       this.cache.set(dir, []);
@@ -239,10 +267,20 @@ export class ObsidianTreeProvider implements vscode.TreeDataProvider<ObsidianNod
     return { light: vscode.Uri.file(img), dark: vscode.Uri.file(img) };
   }
 
-  private getTaskCount(filePath: string): {completed: number, total: number} {
+  // Synchronous version for getTreeItem (uses cache only)
+  private getTaskCountSync(filePath: string): {completed: number, total: number} {
+    const cached = this.taskCache.get(filePath);
+    if (cached) {
+      return { completed: cached.completed, total: cached.total };
+    }
+    return { completed: 0, total: 0 };
+  }
+
+  // Asynchronous version for preloading
+  private async getTaskCountAsync(filePath: string): Promise<{completed: number, total: number}> {
     try {
       // Check if we have cached task count and file hasn't been modified
-      const stat = require('fs').statSync(filePath);
+      const stat = await fs.stat(filePath);
       const lastModified = stat.mtime.getTime();
       
       const cached = this.taskCache.get(filePath);
@@ -251,7 +289,7 @@ export class ObsidianTreeProvider implements vscode.TreeDataProvider<ObsidianNod
       }
 
       // Read file and count tasks
-      const content = require('fs').readFileSync(filePath, 'utf8');
+      const content = await fs.readFile(filePath, 'utf8');
       
       // Match both - [ ] (uncompleted) and - [x] or - [X] (completed) tasks
       const taskRegex = /^[\s]*[-*+]\s+\[(\s|x|X)\]/gm;
@@ -268,5 +306,27 @@ export class ObsidianTreeProvider implements vscode.TreeDataProvider<ObsidianNod
       // If file can't be read, return no tasks
       return { completed: 0, total: 0 };
     }
+  }
+
+  // Preload task counts for multiple files in parallel
+  private preloadTaskCounts(filePaths: string[]): void {
+    // Fire and forget - load in background
+    Promise.all(
+      filePaths.map(filePath => {
+        // Avoid duplicate promises
+        if (!this.taskCountPromises.has(filePath)) {
+          const promise = this.getTaskCountAsync(filePath).finally(() => {
+            this.taskCountPromises.delete(filePath);
+          });
+          this.taskCountPromises.set(filePath, promise);
+        }
+        return this.taskCountPromises.get(filePath);
+      })
+    ).then(() => {
+      // Refresh tree to show task counts once loaded
+      this._onDidChangeTreeData.fire();
+    }).catch(() => {
+      // Ignore errors in background loading
+    });
   }
 }

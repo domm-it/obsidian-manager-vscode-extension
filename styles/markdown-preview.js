@@ -237,11 +237,17 @@
                     header.setAttribute('data-accordion-open', String(isOpen));
                     header.setAttribute('data-accordion-id', accordionId);
                     
-                    // Create arrow icon
+                    // Create arrow icon using SVG
                     const arrow = document.createElement('span');
                     arrow.className = 'accordion-arrow';
-                    arrow.innerHTML = '▼';
+                    arrow.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" width="512" height="512"><path d="M9,17.88V6.71A1,1,0,0,1,10.71,6l5.58,5.59a1,1,0,0,1,0,1.41l-5.58,5.59A1,1,0,0,1,9,17.88Z"/></svg>`;
                     header.insertBefore(arrow, header.firstChild);
+                    
+                    // Add ellipsis indicator for closed state
+                    const ellipsis = document.createElement('span');
+                    ellipsis.className = 'accordion-ellipsis';
+                    ellipsis.textContent = ' ...';
+                    header.appendChild(ellipsis);
                     
                     // Wrap content in container using DocumentFragment
                     const wrapper = document.createElement('div');

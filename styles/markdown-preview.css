@@ -405,15 +405,35 @@ label {
 }
 
 .accordion-arrow {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     width: 16px;
     height: 16px;
-    margin-right: 3px;
-    font-size: 16px;
-    transition: transform 0.2s ease, color 0.2s ease, opacity 0.2s ease;
+    margin-right: 6px;
+    transition: transform 0.2s ease, opacity 0.2s ease;
     opacity: 0.5;
-    color: var(--vscode-foreground);
+    color: var(--vscode-textLink-foreground, #4EC9B0);
     vertical-align: middle;
+}
+
+.accordion-arrow svg {
+    display: block;
+    width: 16px;
+    height: 16px;
+}
+
+.accordion-ellipsis {
+    opacity: 0.5;
+    color: var(--vscode-descriptionForeground, #999);
+    font-style: italic;
+    margin-left: 8px;
+    display: none;
+}
+
+/* Show ellipsis only when closed */
+.accordion-header[data-accordion-open="false"] .accordion-ellipsis {
+    display: inline;
 }
 
 /* Show arrow on hover */
@@ -421,17 +441,16 @@ label {
     opacity: 1;
 }
 
-/* Show arrow when closed with primary color */
+/* Show arrow when closed pointing right */
 .accordion-header[data-accordion-open="false"] .accordion-arrow {
     opacity: 1;
-    color: var(--vscode-textLink-foreground, #4EC9B0);
-    transform: rotate(-90deg);
+    transform: rotate(0deg);
     transform-origin: center center;
 }
 
-/* Rotate arrow when open (only visible on hover) */
-.accordion-header[data-accordion-open="true"]:hover .accordion-arrow {
-    transform: rotate(0deg);
+/* Rotate arrow down when open */
+.accordion-header[data-accordion-open="true"] .accordion-arrow {
+    transform: rotate(90deg);
     transform-origin: center center;
 }
 
