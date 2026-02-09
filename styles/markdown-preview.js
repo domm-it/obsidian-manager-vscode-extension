@@ -734,13 +734,13 @@
 
     function addCopyButtonsToCodeBlocks() {
         try {
-            // Only process pre elements without copy button
-            const preElements = document.querySelectorAll('pre:not(:has(.copy-button))');
+            const preElements = document.querySelectorAll('pre');
             if (preElements.length === 0) {
                 return; // Early exit
             }
             preElements.forEach((preElement) => {
                 try {
+                    // Skip if already has button (checked in addCopyButton)
                     addCopyButton(preElement);
                 } catch (e) {
                     console.warn('Error adding copy button to element:', e);
