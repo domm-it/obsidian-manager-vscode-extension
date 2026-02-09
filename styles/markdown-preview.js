@@ -60,7 +60,7 @@
                     } catch (e) {
                         console.warn('Error in checkForContentChanges:', e);
                     }
-                }, 1000); // Increased to 1 second to reduce flickering
+                }, 300); // 300ms for quick updates
             }
         } catch (e) {
             console.warn('Error in checkForContentChanges:', e);
@@ -68,7 +68,7 @@
     }
 
     function startPeriodicCheck() {
-        setInterval(checkForContentChanges, 2000);
+        setInterval(checkForContentChanges, 5000); // Reduced frequency: 5s instead of 2s
     }
 
     function setupFocusListener() {
@@ -88,7 +88,9 @@
                 childList: true,
                 subtree: true,
                 attributes: false,
-                characterData: false
+                characterData: false,
+                attributeOldValue: false,
+                characterDataOldValue: false
             });
         }
         
@@ -146,10 +148,12 @@
                         childList: true,
                         subtree: true,
                         attributes: false,
-                        characterData: false
+                        characterData: false,
+                        attributeOldValue: false,
+                        characterDataOldValue: false
                     });
                 }
-            }, 100);
+            }, 50); // Reduced from 100ms to 50ms
         }
     }
 
@@ -169,14 +173,22 @@
     
     function enhanceHeaderAccordions() {
         try {
-            // Get file path from base tag for unique storage key
+            // Find all headers that aren't already enhanced - optimized selector
+            const headers = document.querySelectorAll('h1:not([data-accordion-enhanced]), h2:not([data-accordion-enhanced]), h3:not([data-accordion-enhanced]), h4:not([data-accordion-enhanced]), h5:not([data-accordion-enhanced]), h6:not([data-accordion-enhanced])');
+            
+            // Early exit if no headers to process
+            if (headers.length === 0) {
+                return;
+            }
+            
+            // Cache base tag and file path lookup
             const baseTag = document.querySelector('base');
             const filePath = baseTag ? baseTag.href : 'unknown';
             
-            // Find all headers that aren't already enhanced
-            const headers = document.querySelectorAll('h1:not([data-accordion-enhanced]), h2:not([data-accordion-enhanced]), h3:not([data-accordion-enhanced]), h4:not([data-accordion-enhanced]), h5:not([data-accordion-enhanced]), h6:not([data-accordion-enhanced])');
+            // Use DocumentFragment for batch operations
+            const headerArray = Array.from(headers);
             
-            headers.forEach(header => {
+            headerArray.forEach(header => {
                 // Mark as enhanced
                 header.setAttribute('data-accordion-enhanced', 'true');
                 
@@ -231,17 +243,19 @@
                     arrow.innerHTML = '▼';
                     header.insertBefore(arrow, header.firstChild);
                     
-                    // Wrap content in container
+                    // Wrap content in container using DocumentFragment
                     const wrapper = document.createElement('div');
                     wrapper.className = 'accordion-content';
                     wrapper.setAttribute('data-accordion-open', String(isOpen));
                     
+                    // Use DocumentFragment for efficient batch append
+                    const fragment = document.createDocumentFragment();
                     content.forEach(el => {
-                        wrapper.appendChild(el.cloneNode(true));
+                        fragment.appendChild(el); // Move instead of clone+remove
                     });
+                    wrapper.appendChild(fragment);
                     
-                    // Remove original content and insert wrapper
-                    content.forEach(el => el.remove());
+                    // Insert wrapper after header
                     header.parentNode.insertBefore(wrapper, header.nextSibling);
                     
                     // Apply initial state
@@ -305,7 +319,14 @@
     ================================================================*/
     function enhanceHashtags() {
         try {
-            // Find all text nodes and wrap hashtags
+            // Optimize: Only process elements not already marked
+            const unprocessedElements = document.querySelectorAll('p:not([data-hashtag-scanned]), li:not([data-hashtag-scanned]), td:not([data-hashtag-scanned]), th:not([data-hashtag-scanned])');
+            
+            if (unprocessedElements.length === 0) {
+                return; // Nothing to process
+            }
+            
+            // Find all text nodes and wrap hashtags - limited scope
             const walker = document.createTreeWalker(
                 document.body,
                 NodeFilter.SHOW_TEXT,
@@ -459,15 +480,12 @@
                 checkboxServerInitialized = true;
             }
             
-            // Find all checkbox inputs and make them interactive
-            let checkboxes = document.querySelectorAll('input[type="checkbox"].task-list-item-checkbox:not([data-enhanced])');
+            // Find all checkbox inputs and make them interactive - optimized query
+            let checkboxes = document.querySelectorAll('input[type="checkbox"].task-list-item-checkbox:not([data-enhanced]), .task-list-item input[type="checkbox"]:not([data-enhanced]), .task-list input[type="checkbox"]:not([data-enhanced])');
             
+            // Early exit if no checkboxes to enhance
             if (checkboxes.length === 0) {
-                checkboxes = document.querySelectorAll('.task-list-item input[type="checkbox"]:not([data-enhanced])');
-            }
-            
-            if (checkboxes.length === 0) {
-                checkboxes = document.querySelectorAll('.task-list input[type="checkbox"]:not([data-enhanced])');
+                return;
             }
             
             checkboxes.forEach((checkbox) => {
@@ -476,24 +494,28 @@
                 checkbox.removeAttribute('disabled');
                 checkbox.style.cursor = 'pointer';
                 
-                // Wrap checkbox and its label in a container to prevent layout issues
+                // Skip wrapper creation if already wrapped or no label
                 const listItem = checkbox.closest('li.task-list-item');
-                if (listItem && !checkbox.parentElement.classList.contains('task-checkbox-wrapper')) {
-                    // Find the label that follows the checkbox
-                    const label = checkbox.nextElementSibling;
-                    if (label && label.tagName === 'LABEL') {
-                        // Create wrapper
-                        const wrapper = document.createElement('div');
-                        wrapper.className = 'task-checkbox-wrapper';
-                        
-                        // Insert wrapper before checkbox
-                        checkbox.parentNode.insertBefore(wrapper, checkbox);
-                        
-                        // Move checkbox and label into wrapper
-                        wrapper.appendChild(checkbox);
-                        wrapper.appendChild(label);
-                    }
+                if (!listItem || checkbox.parentElement.classList.contains('task-checkbox-wrapper')) {
+                    return;
                 }
+                
+                // Find the label that follows the checkbox
+                const label = checkbox.nextElementSibling;
+                if (!label || label.tagName !== 'LABEL') {
+                    return;
+                }
+                
+                // Create wrapper efficiently
+                const wrapper = document.createElement('div');
+                wrapper.className = 'task-checkbox-wrapper';
+                
+                // Insert wrapper before checkbox
+                checkbox.parentNode.insertBefore(wrapper, checkbox);
+                
+                // Move elements into wrapper
+                wrapper.appendChild(checkbox);
+                wrapper.appendChild(label);
             });
         } catch (e) {
             // Silent fail
@@ -578,12 +600,12 @@
     // region - ADD COPY TO SHORT-CODE
     ================================================================*/
     function addCopyToShortCode() {
-        // Find code elements that haven't been wrapped yet
-        const codeElements = Array.from(document.querySelectorAll('code:not([data-copy-enhanced])')).filter(
-            code => !code.closest('pre') && !code.closest('.short-code-container')
+        // Find code elements that haven't been wrapped yet - optimized query
+        const codeElements = Array.from(document.querySelectorAll('code:not([data-copy-enhanced]):not(pre code)')).filter(
+            code => !code.closest('.short-code-container')
         );
-        if (!codeElements || codeElements.length === 0) {
-            return;
+        if (codeElements.length === 0) {
+            return; // Early exit
         }
         codeElements.forEach((codeElement) => {
             // Mark as enhanced before wrapping
@@ -706,7 +728,11 @@
 
     function addCopyButtonsToCodeBlocks() {
         try {
-            const preElements = document.querySelectorAll('pre');
+            // Only process pre elements without copy button
+            const preElements = document.querySelectorAll('pre:not(:has(.copy-button))');
+            if (preElements.length === 0) {
+                return; // Early exit
+            }
             preElements.forEach((preElement) => {
                 try {
                     addCopyButton(preElement);
