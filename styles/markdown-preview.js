@@ -240,7 +240,7 @@
                     // Create arrow icon using SVG
                     const arrow = document.createElement('span');
                     arrow.className = 'accordion-arrow';
-                    arrow.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" width="512" height="512"><path d="M9,17.88V6.71A1,1,0,0,1,10.71,6l5.58,5.59a1,1,0,0,1,0,1.41l-5.58,5.59A1,1,0,0,1,9,17.88Z"/></svg>`;
+                    arrow.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" width="512" height="512"><path d="M0,5V19a5.006,5.006,0,0,0,5,5H19a5.006,5.006,0,0,0,5-5V5a5.006,5.006,0,0,0-5-5H5A5.006,5.006,0,0,0,0,5ZM10.6,6.269l5.154,5.087a.9.9,0,0,1,0,1.288L10.6,17.731a.924.924,0,0,1-1.575-.644V6.913A.924.924,0,0,1,10.6,6.269Z"/></svg>`;
                     header.insertBefore(arrow, header.firstChild);
                     
                     // Add ellipsis indicator for closed state

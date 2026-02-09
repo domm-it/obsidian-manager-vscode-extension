@@ -412,7 +412,7 @@ label {
     height: 16px;
     margin-right: 6px;
     transition: transform 0.2s ease, opacity 0.2s ease;
-    opacity: 0.5;
+    opacity: 0.35;
     color: var(--vscode-textLink-foreground, #4EC9B0);
     vertical-align: middle;
 }
@@ -425,9 +425,9 @@ label {
 
 .accordion-ellipsis {
     opacity: 0.5;
-    color: var(--vscode-descriptionForeground, #999);
+    color: #fff;
     font-style: italic;
-    margin-left: 8px;
+    margin-left: 4px;
     display: none;
 }
 
@@ -437,7 +437,8 @@ label {
 }
 
 /* Show arrow on hover */
-.accordion-header:hover .accordion-arrow {
+.accordion-header:hover .accordion-arrow,
+.accordion-header[data-accordion-open="false"]:hover .accordion-ellipsis {
     opacity: 1;
 }
 
