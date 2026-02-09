@@ -2395,6 +2395,28 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   context.subscriptions.push(revealInFinderCmd);
 
+  // Command to copy absolute path to clipboard
+  const copyAbsolutePathCmd = vscode.commands.registerCommand('obsidianManager.copyAbsolutePath', async (...args: any[]) => {
+    const first = args && args[0];
+    let node = undefined as any;
+    if (first instanceof vscode.Uri) node = { resourceUri: first, isDirectory: false };
+    else if (first && typeof first === 'object') node = first;
+    
+    if (!node || !node.resourceUri) {
+      vscode.window.showErrorMessage('No file or folder selected.');
+      return;
+    }
+
+    try {
+      const absolutePath = node.resourceUri.fsPath;
+      await vscode.env.clipboard.writeText(absolutePath);
+      vscode.window.showInformationMessage(`Copied to clipboard: ${absolutePath}`);
+    } catch (err) {
+      vscode.window.showErrorMessage(`Failed to copy path: ${String(err)}`);
+    }
+  });
+  context.subscriptions.push(copyAbsolutePathCmd);
+
   // Command to open file in edit mode
   const openInEditModeCmd = vscode.commands.registerCommand('obsidianManager.openInEditMode', async (...args: any[]) => {
     const first = args && args[0];
@@ -2766,6 +2788,285 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   });
   context.subscriptions.push(convertListToCheckboxCmd);
+
+  // Command to move uncompleted tasks to another file
+  const moveUncompletedTasksCmd = vscode.commands.registerCommand('obsidianManager.moveUncompletedTasks', async () => {
+    try {
+      // Get current document URI (works in both edit and preview mode)
+      const uri = getCurrentDocumentUri();
+      if (!uri) {
+        vscode.window.showErrorMessage('No active markdown file found.');
+        return;
+      }
+
+      if (!uri.fsPath.endsWith('.md')) {
+        vscode.window.showErrorMessage('This command is only available for Markdown files.');
+        return;
+      }
+
+      const cfg = vscode.workspace.getConfiguration('obsidianManager');
+      const configuredVault = ((cfg.get<string>('vault') || '')).trim();
+      if (!configuredVault) {
+        vscode.window.showErrorMessage('Please configure the obsidianManager.vault setting first.');
+        return;
+      }
+
+      // Open document
+      const document = await vscode.workspace.openTextDocument(uri);
+      const fullText = document.getText();
+      const lines = fullText.split('\n');
+      
+      // Collect uncompleted tasks with their children (indented lines)
+      const uncompletedTasks: {lineIndex: number, lines: string[]}[] = [];
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        // Match uncompleted checkboxes: - [ ]
+        const match = line.match(/^(\s*)-\s*\[\s\]/);
+        if (match) {
+          const taskLines: string[] = [line];
+          const taskIndent = match[1].length;
+          
+          // Collect all subsequent lines that are more indented (children)
+          let j = i + 1;
+          while (j < lines.length) {
+            const nextLine = lines[j];
+            // Empty lines are included if they're between indented content
+            if (nextLine.trim() === '') {
+              // Check if there's more indented content after this empty line
+              let k = j + 1;
+              let hasMoreIndentedContent = false;
+              while (k < lines.length && lines[k].trim() === '') k++;
+              if (k < lines.length) {
+                const nextNonEmptyLine = lines[k];
+                const nextIndentMatch = nextNonEmptyLine.match(/^(\s*)/);
+                if (nextIndentMatch && nextIndentMatch[1].length > taskIndent) {
+                  hasMoreIndentedContent = true;
+                }
+              }
+              if (hasMoreIndentedContent) {
+                taskLines.push(nextLine);
+                j++;
+                continue;
+              } else {
+                break;
+              }
+            }
+            
+            // Check indentation of non-empty line
+            const indentMatch = nextLine.match(/^(\s*)/)!;
+            const nextIndent = indentMatch[1].length;
+            
+            // If more indented than parent task, it's a child
+            if (nextIndent > taskIndent) {
+              taskLines.push(nextLine);
+              j++;
+            } else {
+              // Equal or less indentation - not a child
+              break;
+            }
+          }
+          
+          uncompletedTasks.push({ lineIndex: i, lines: taskLines });
+          // Skip the lines we've already processed
+          i = j - 1;
+        }
+      }
+
+      if (uncompletedTasks.length === 0) {
+        vscode.window.showInformationMessage('No uncompleted tasks found in this file.');
+        return;
+      }
+
+      // Get all markdown files from the provider's cache
+      await provider.ensurePreloaded();
+      const allFiles = await getAllMarkdownFiles(provider, configuredVault);
+
+      // Create quick pick items
+      const quickPickItems: vscode.QuickPickItem[] = [];
+
+      // Add "Create new file" as first option
+      quickPickItems.push({
+        label: '$(file-add) Create new file',
+        description: 'Create a new markdown file and move uncompleted tasks to it',
+        detail: '__CREATE_NEW__'
+      });
+
+      // Add separator if there are existing files
+      if (allFiles.length > 0) {
+        quickPickItems.push({
+          label: '',
+          description: '─────────────────────────',
+          detail: '__SEPARATOR__',
+          kind: vscode.QuickPickItemKind.Separator
+        });
+
+        // Add existing files (exclude current file)
+        allFiles.forEach(file => {
+          if (file.resourceUri.fsPath !== uri.fsPath) {
+            const relativePath = path.relative(configuredVault, file.resourceUri.fsPath);
+            const fileName = path.basename(file.resourceUri.fsPath, '.md');
+            
+            quickPickItems.push({
+              label: fileName,
+              description: relativePath,
+              detail: file.resourceUri.fsPath
+            });
+          }
+        });
+
+        // Sort existing files by name
+        const filesToSort = quickPickItems.slice(2);
+        filesToSort.sort((a, b) => a.label.localeCompare(b.label));
+        quickPickItems.splice(2, filesToSort.length, ...filesToSort);
+      }
+
+      // Show quick pick dialog
+      const selectedItem = await vscode.window.showQuickPick(quickPickItems, {
+        placeHolder: `Move ${uncompletedTasks.length} uncompleted task(s) to...`,
+        matchOnDescription: true,
+        matchOnDetail: true
+      });
+
+      if (!selectedItem || selectedItem.detail === '__SEPARATOR__') {
+        return;
+      }
+
+      let targetFilePath: string;
+
+      if (selectedItem.detail === '__CREATE_NEW__') {
+        // Create new file workflow - support folders
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        const todayString = `${year}-${month}-${day}-recap`;
+
+        const newFileInput = await vscode.window.showInputBox({
+          prompt: 'Enter file path (e.g., "recap/2024-06-30-recap" or just "filename")',
+          value: todayString,
+          placeHolder: 'folder/filename or filename',
+          validateInput: (input) => {
+            if (!input || input.trim() === '') {
+              return 'Path cannot be empty';
+            }
+            // Check for invalid characters (excluding forward slash for folders)
+            if (/[<>:"|?*]/.test(input) || input.includes('\\')) {
+              return 'Path contains invalid characters';
+            }
+            return null;
+          }
+        });
+
+        if (!newFileInput) {
+          return;
+        }
+
+        // Parse input to handle folders
+        const inputTrimmed = newFileInput.trim();
+        const fullFileName = inputTrimmed.endsWith('.md') ? inputTrimmed : `${inputTrimmed}.md`;
+        targetFilePath = path.join(configuredVault, fullFileName);
+
+        // Create parent directories if they don't exist
+        const targetDir = path.dirname(targetFilePath);
+        try {
+          await fs.mkdir(targetDir, { recursive: true });
+        } catch (err) {
+          vscode.window.showErrorMessage(`Failed to create directory: ${String(err)}`);
+          return;
+        }
+
+        // Check if file already exists
+        try {
+          await fs.access(targetFilePath);
+          const choice = await vscode.window.showQuickPick(['Append', 'Cancel'], { 
+            placeHolder: `File "${path.basename(targetFilePath)}" already exists. What would you like to do?` 
+          });
+          if (!choice || choice === 'Cancel') return;
+        } catch (e) {
+          // File doesn't exist, create it with title
+          const addTitle = cfg.get<boolean>('addTitleToNewFiles', true);
+          let initialContent = '';
+          if (addTitle) {
+            const fileNameWithoutExt = path.basename(targetFilePath, '.md');
+            initialContent = `# ${fileNameWithoutExt}\n\n`;
+          }
+          await fs.writeFile(targetFilePath, initialContent);
+        }
+      } else {
+        targetFilePath = selectedItem.detail!;
+      }
+
+      // Read target file content
+      let targetContent = await fs.readFile(targetFilePath, 'utf8');
+
+      // Add context header
+      const sourceFileNameWithoutExt = path.basename(uri.fsPath, '.md');
+      const sourceRelativePath = path.relative(configuredVault, uri.fsPath);
+      const contextHeader = `\n\n---\n\n## Moved from [${sourceFileNameWithoutExt}](${sourceRelativePath})\n\n`;
+      
+      // Append tasks to target file
+      const tasksText = uncompletedTasks.map(t => t.lines.join('\n')).join('\n');
+      targetContent += contextHeader + tasksText;
+      await fs.writeFile(targetFilePath, targetContent);
+
+      // Remove tasks from source file
+      const isInPreview = !vscode.window.activeTextEditor || 
+                          vscode.window.activeTextEditor.document.uri.toString() !== uri.toString();
+      
+      if (isInPreview) {
+        // Use WorkspaceEdit
+        const edit = new vscode.WorkspaceEdit();
+        // Delete lines in reverse order to maintain correct line indices
+        for (let i = uncompletedTasks.length - 1; i >= 0; i--) {
+          const task = uncompletedTasks[i];
+          const lineRange = new vscode.Range(
+            new vscode.Position(task.lineIndex, 0),
+            new vscode.Position(task.lineIndex + task.lines.length, 0) // Delete all task lines including children
+          );
+          edit.delete(uri, lineRange);
+        }
+        await vscode.workspace.applyEdit(edit);
+      } else {
+        // Use editor API
+        const editor = vscode.window.activeTextEditor!;
+        await editor.edit(editBuilder => {
+          // Delete lines in reverse order
+          for (let i = uncompletedTasks.length - 1; i >= 0; i--) {
+            const task = uncompletedTasks[i];
+            const lineRange = new vscode.Range(
+              new vscode.Position(task.lineIndex, 0),
+              new vscode.Position(task.lineIndex + task.lines.length, 0) // Delete all task lines including children
+            );
+            editBuilder.delete(lineRange);
+          }
+        });
+      }
+
+      // Refresh provider
+      try { await provider.refreshAll(); } catch (e) { provider.refresh(); }
+
+      // Show success message with option to open target file
+      const action = await vscode.window.showInformationMessage(
+        `Moved ${uncompletedTasks.length} uncompleted task(s) to ${path.basename(targetFilePath)}`,
+        'Open File'
+      );
+
+      if (action === 'Open File') {
+        const openFileMode = cfg.get<string>('openFileMode', 'preview');
+        if (openFileMode === 'preview') {
+          await showMarkdownPreviewSafe(vscode.Uri.file(targetFilePath));
+        } else {
+          const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(targetFilePath));
+          await vscode.window.showTextDocument(doc, { preview: false });
+        }
+      }
+
+    } catch (err) {
+      vscode.window.showErrorMessage(`Error moving uncompleted tasks: ${String(err)}`);
+    }
+  });
+  context.subscriptions.push(moveUncompletedTasksCmd);
 
   // Filter Task Table by specific file
   const filterTasksByFileCmd = vscode.commands.registerCommand('obsidianManager.filterTasksByFile', async (...args: any[]) => {

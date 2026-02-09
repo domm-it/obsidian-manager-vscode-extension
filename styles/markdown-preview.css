@@ -138,14 +138,62 @@ input[type="checkbox"].task-list-item-checkbox:disabled {
     flex-wrap: wrap;
 }
 
+/* Wrapper for checkbox and label */
+.task-checkbox-wrapper {
+    display: flex;
+    align-items: flex-start;
+    flex: 1;
+    min-width: 0;
+    margin-bottom: 4px;
+}
+
 .task-list-item input[type="checkbox"] {
     flex-shrink: 0;
 }
 
 /* Text content next to checkbox */
-.task-list-item > label {
+.task-list-item > label,
+.task-checkbox-wrapper > label {
     flex: 1;
     margin: 0;
+    line-height: 1.6;
+    min-width: 0;
+}
+
+/* Code blocks within task items should appear on new line */
+.task-list-item > pre {
+    flex-basis: 100%;
+    width: 100%;
+    margin-top: 8px;
+    margin-left: 0;
+}
+
+/* Handle inline code within task items */
+.task-list-item code {
+    display: inline-block !important;
+    white-space: pre-wrap !important;
+    word-break: break-word;
+    vertical-align: top;
+    max-width: 100%;
+}
+
+.task-list-item .short-code-container {
+    display: inline-block !important;
+    vertical-align: top;
+    max-width: 100%;
+}
+
+/* Ensure text and code flow naturally */
+.task-list-item p {
+    display: inline !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    line-height: inherit;
+}
+
+.task-list-item p code {
+    display: inline !important;
+    vertical-align: baseline;
 }
 
 /* Force nested lists to break to new line */
@@ -160,13 +208,6 @@ input[type="checkbox"].task-list-item-checkbox:disabled {
 
 .task-list-item.completed {
     opacity: 0.8;
-}
-
-/* Remove any paragraph margins inside task items */
-.task-list-item p {
-    margin: 0;
-    padding: 0;
-    display: inline;
 }
 
 /*================================================================

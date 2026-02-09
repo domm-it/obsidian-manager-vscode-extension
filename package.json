@@ -102,6 +102,12 @@
         "icon": "$(checklist)"
       },
       {
+        "command": "obsidianManager.moveUncompletedTasks",
+        "title": "Move Uncompleted Tasks to Another File",
+        "category": "Obsidian manager",
+        "icon": "$(arrow-right)"
+      },
+      {
         "command": "obsidianManager.pasteAsLink",
         "title": "Obsidian > Paste as link",
         "category": "Obsidian manager",
@@ -252,6 +258,12 @@
         "icon": "$(folder-opened)"
       },
       {
+        "command": "obsidianManager.copyAbsolutePath",
+        "title": "Copy Absolute Path",
+        "category": "Obsidian manager",
+        "icon": "$(copy)"
+      },
+      {
         "command": "obsidianManager.openInEditMode",
         "title": "1 - Open in Edit Mode",
         "category": "Obsidian manager",
@@ -324,6 +336,11 @@
         },
         {
           "command": "obsidianManager.convertListToCheckbox",
+          "when": "resourceExtname == .md || editorLangId == markdown",
+          "group": "navigation"
+        },
+        {
+          "command": "obsidianManager.moveUncompletedTasks",
           "when": "resourceExtname == .md || editorLangId == markdown",
           "group": "navigation"
         },
@@ -416,6 +433,11 @@
         },
         {
           "command": "obsidianManager.revealInFinder",
+          "when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder || viewItem == obsidianRootFolder)",
+          "group": "2_calendar"
+        },
+        {
+          "command": "obsidianManager.copyAbsolutePath",
           "when": "view == obsidianFiles && (viewItem == obsidianFile || viewItem == obsidianFolder || viewItem == obsidianRootFolder)",
           "group": "2_calendar"
         },

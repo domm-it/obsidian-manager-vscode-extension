@@ -326,6 +326,25 @@
                 checkbox.setAttribute('data-enhanced', 'true');
                 checkbox.removeAttribute('disabled');
                 checkbox.style.cursor = 'pointer';
+                
+                // Wrap checkbox and its label in a container to prevent layout issues
+                const listItem = checkbox.closest('li.task-list-item');
+                if (listItem && !checkbox.parentElement.classList.contains('task-checkbox-wrapper')) {
+                    // Find the label that follows the checkbox
+                    const label = checkbox.nextElementSibling;
+                    if (label && label.tagName === 'LABEL') {
+                        // Create wrapper
+                        const wrapper = document.createElement('div');
+                        wrapper.className = 'task-checkbox-wrapper';
+                        
+                        // Insert wrapper before checkbox
+                        checkbox.parentNode.insertBefore(wrapper, checkbox);
+                        
+                        // Move checkbox and label into wrapper
+                        wrapper.appendChild(checkbox);
+                        wrapper.appendChild(label);
+                    }
+                }
             });
         } catch (e) {
             // Silent fail
