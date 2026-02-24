@@ -183,8 +183,6 @@ input[type="checkbox"].task-list-item-checkbox:disabled {
 }
 
 .task-list-item .short-code-container {
-    display: inline-block !important;
-    vertical-align: top;
     max-width: 100%;
 }
 
@@ -477,6 +475,8 @@ label {
     padding: 0 4px;
     font-family: var(--vscode-editor-font-family, monospace);
     color: var(--vscode-textLink-foreground, #4EC9B0);
+    border: 1px solid var(--vscode-textLink-foreground, #4EC9B0);
+    font-size: 0.8rem;
     transition: background-color 0.2s ease;
 }
 
