@@ -315,6 +315,60 @@
         "title": "Refresh Hashtags",
         "category": "Obsidian manager",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "obsidianManager.syncNetworkPaths",
+        "title": "Sync All Network Paths",
+        "category": "Obsidian manager",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "obsidianManager.syncNetworkPath",
+        "title": "Sync This Path",
+        "category": "Obsidian manager",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "obsidianManager.networkSync.createFile",
+        "title": "New note",
+        "category": "Obsidian manager",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "obsidianManager.networkSync.createFolder",
+        "title": "New folder",
+        "category": "Obsidian manager",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "obsidianManager.networkSync.duplicateFile",
+        "title": "Duplicate",
+        "category": "Obsidian manager",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "obsidianManager.networkSync.renameFile",
+        "title": "Rename",
+        "category": "Obsidian manager",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "obsidianManager.networkSync.deleteFile",
+        "title": "Delete",
+        "category": "Obsidian manager",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "obsidianManager.networkSync.renameFolder",
+        "title": "Rename folder",
+        "category": "Obsidian manager",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "obsidianManager.networkSync.deleteFolder",
+        "title": "Delete folder",
+        "category": "Obsidian manager",
+        "icon": "$(trash)"
       }
     ],
     "menus": {
@@ -351,6 +405,46 @@
         }
       ],
       "view/item/context": [
+        {
+          "command": "obsidianManager.syncNetworkPath",
+          "when": "view == obsidianNetworkSync && viewItem == networkSyncRoot",
+          "group": "inline"
+        },
+        {
+          "command": "obsidianManager.networkSync.createFile",
+          "when": "view == obsidianNetworkSync && (viewItem == networkSyncFolder || viewItem == networkSyncRoot)",
+          "group": "inline@1"
+        },
+        {
+          "command": "obsidianManager.networkSync.createFolder",
+          "when": "view == obsidianNetworkSync && (viewItem == networkSyncFolder || viewItem == networkSyncRoot)",
+          "group": "inline@2"
+        },
+        {
+          "command": "obsidianManager.networkSync.duplicateFile",
+          "when": "view == obsidianNetworkSync && viewItem == networkSyncFile",
+          "group": "1_modify@1"
+        },
+        {
+          "command": "obsidianManager.networkSync.renameFile",
+          "when": "view == obsidianNetworkSync && viewItem == networkSyncFile",
+          "group": "1_modify@2"
+        },
+        {
+          "command": "obsidianManager.networkSync.deleteFile",
+          "when": "view == obsidianNetworkSync && viewItem == networkSyncFile",
+          "group": "1_modify@3"
+        },
+        {
+          "command": "obsidianManager.networkSync.renameFolder",
+          "when": "view == obsidianNetworkSync && viewItem == networkSyncFolder",
+          "group": "1_modify@1"
+        },
+        {
+          "command": "obsidianManager.networkSync.deleteFolder",
+          "when": "view == obsidianNetworkSync && viewItem == networkSyncFolder",
+          "group": "1_modify@2"
+        },
         {
           "command": "obsidianManager.showTaskTableForProject",
           "when": "view == obsidianFiles && viewItem == obsidianRootFolder",
@@ -486,6 +580,11 @@
       ],
       "view/title": [
         {
+          "command": "obsidianManager.syncNetworkPaths",
+          "when": "view == obsidianNetworkSync",
+          "group": "navigation"
+        },
+        {
           "command": "obsidianManager.createFolder",
           "when": "view == obsidianFiles",
           "group": "navigation@1"
@@ -605,6 +704,34 @@
           ],
           "default": "full",
           "description": "When pasting a URL as a link: 'full' shows the full URL as link text; 'lastSegment' shows only the last path segment/file name. Query strings and hashes are removed from the preview."
+        },
+        "obsidianManager.networkPaths": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string",
+                "description": "Network path URL (e.g. smb://192.168.1.10/sharename)"
+              },
+              "username": {
+                "type": "string",
+                "description": "Username for authentication (optional)"
+              },
+              "password": {
+                "type": "string",
+                "description": "Password for authentication (optional). Stored in plain text in settings.json."
+              }
+            },
+            "required": ["url"]
+          },
+          "default": [],
+          "description": "List of network paths to sync. Each entry has a url (e.g. smb://192.168.1.10/sharename) and optional username/password."
+        },
+        "obsidianManager.networkSyncLocalFolder": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to the local folder used to store copies of network-synced files. Each network path gets its own sub-folder inside this directory."
         }
       }
     },
@@ -667,6 +794,11 @@
           "id": "obsidianCalendar",
           "name": "Calendar",
           "type": "webview",
+          "visibility": "visible"
+        },
+        {
+          "id": "obsidianNetworkSync",
+          "name": "Network Sync",
           "visibility": "visible"
         },
         {

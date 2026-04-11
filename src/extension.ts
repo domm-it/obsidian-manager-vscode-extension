@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { ObsidianTreeProvider, ObsidianNode } from './obsidianTree';
 import { TaskTableProvider } from './taskTableProvider';
 import { HashtagTreeProvider } from './hashtagTree';
+import { NetworkSyncProvider, NetworkSyncDragAndDropController } from './networkSyncProvider';
 import { createCheckboxServer } from './checkboxServer';
 import * as path from 'path';
 import { promises as fs } from 'fs';
@@ -910,6 +911,94 @@ export async function activate(context: vscode.ExtensionContext) {
   const hashtagProvider = new HashtagTreeProvider(context);
   const hashtagTreeView = vscode.window.createTreeView('obsidianHashtags', { treeDataProvider: hashtagProvider });
   context.subscriptions.push(hashtagTreeView);
+
+  // Register Network Sync tree provider
+  const networkSyncProvider = new NetworkSyncProvider(context);
+  const networkSyncDnD = new NetworkSyncDragAndDropController(networkSyncProvider);
+  const networkSyncTreeView = vscode.window.createTreeView('obsidianNetworkSync', {
+    treeDataProvider: networkSyncProvider,
+    dragAndDropController: networkSyncDnD
+  });
+  context.subscriptions.push(networkSyncTreeView);
+
+  // Sync-all command (view/title button)
+  const syncNetworkPathsCmd = vscode.commands.registerCommand('obsidianManager.syncNetworkPaths', async () => {
+    await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: 'Network Sync', cancellable: false },
+      async (progress) => {
+        await networkSyncProvider.syncAll(progress);
+      }
+    );
+  });
+  context.subscriptions.push(syncNetworkPathsCmd);
+
+  // Sync single-path command (context menu on root node)
+  const syncNetworkPathCmd = vscode.commands.registerCommand('obsidianManager.syncNetworkPath', async (node: any) => {
+    const url: string | undefined = node?.networkUrl ?? node?.label;
+    if (!url) {
+      vscode.window.showErrorMessage('Obsidian Manager: could not determine network path to sync.');
+      return;
+    }
+    await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: `Syncing ${url}`, cancellable: false },
+      async (progress) => {
+        await networkSyncProvider.syncPath(url, undefined, progress);
+      }
+    );
+  });
+  context.subscriptions.push(syncNetworkPathCmd);
+
+  // Network Sync CRUD commands
+  context.subscriptions.push(
+    vscode.commands.registerCommand('obsidianManager.networkSync.createFile', async (node: any) => {
+      if (!node) return;
+      await networkSyncProvider.createFileInNode(node);
+    }),
+    vscode.commands.registerCommand('obsidianManager.networkSync.createFolder', async (node: any) => {
+      if (!node) return;
+      await networkSyncProvider.createFolderInNode(node);
+    }),
+    vscode.commands.registerCommand('obsidianManager.networkSync.duplicateFile', async (node: any) => {
+      if (!node) return;
+      await networkSyncProvider.duplicateFile(node);
+    }),
+    vscode.commands.registerCommand('obsidianManager.networkSync.renameFile', async (node: any) => {
+      if (!node) return;
+      await networkSyncProvider.renameFile(node);
+    }),
+    vscode.commands.registerCommand('obsidianManager.networkSync.deleteFile', async (node: any) => {
+      if (!node) return;
+      await networkSyncProvider.deleteFile(node);
+    }),
+    vscode.commands.registerCommand('obsidianManager.networkSync.renameFolder', async (node: any) => {
+      if (!node) return;
+      await networkSyncProvider.renameFolder(node);
+    }),
+    vscode.commands.registerCommand('obsidianManager.networkSync.deleteFolder', async (node: any) => {
+      if (!node) return;
+      await networkSyncProvider.deleteFolder(node);
+    })
+  );
+
+  // Auto-sync on file save if the saved file lives inside a network sync local folder
+  context.subscriptions.push(
+    vscode.workspace.onDidSaveTextDocument(async (doc) => {
+      const networkUrl = networkSyncProvider.findNetworkUrlForPath(doc.uri.fsPath);
+      if (networkUrl) {
+        await networkSyncProvider.syncPath(networkUrl, undefined, undefined, true);
+      }
+    })
+  );
+
+  // Refresh Network Sync view when relevant config changes
+  vscode.workspace.onDidChangeConfiguration(e => {
+    if (
+      e.affectsConfiguration('obsidianManager.networkPaths') ||
+      e.affectsConfiguration('obsidianManager.networkSyncLocalFolder')
+    ) {
+      networkSyncProvider.refresh();
+    }
+  });
 
   // Auto-reveal active file in tree view
   const revealFileInTree = async (documentUri: vscode.Uri | undefined) => {
