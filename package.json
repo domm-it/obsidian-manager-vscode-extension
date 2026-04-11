@@ -2,7 +2,7 @@
   "name": "obsidian-manager",
   "displayName": "Obsidian Manager",
   "description": "Adds a button and a vault/file manager view to open and manage Markdown files with Obsidian.",
-  "version": "1.6.10",
+  "version": "1.7.0",
   "publisher": "domm-it",
   "icon": "images/logo.png",
   "author": {
@@ -723,7 +723,9 @@
                 "description": "Password for authentication (optional). Stored in plain text in settings.json."
               }
             },
-            "required": ["url"]
+            "required": [
+              "url"
+            ]
           },
           "default": [],
           "description": "List of network paths to sync. Each entry has a url (e.g. smb://192.168.1.10/sharename) and optional username/password."
