@@ -105,8 +105,8 @@ function parseSmbUrl(url: string): { host: string; share: string; subPath: strin
 }
 
 /**
- * Try to mount a share via macOS's `open` command and poll until /Volumes/<share> appears.
- * Returns the local mount path, or null on timeout / unsupported platform.
+ * Try to mount a share via osascript (silent, uses embedded credentials) and poll until
+ * /Volumes/<share> appears. Returns the local mount path, or null on timeout / unsupported platform.
  */
 async function mountSmbAndGetPath(url: string, username?: string, password?: string, timeoutMs = 30000, tryMount = true): Promise<string | null> {
   if (process.platform !== 'darwin') {
@@ -123,25 +123,25 @@ async function mountSmbAndGetPath(url: string, username?: string, password?: str
     return parsed.subPath ? path.join(volumePath, parsed.subPath) : volumePath;
   }
 
-  // In silent/auto mode, don't attempt mounting (avoids opening Finder)
+  // In silent/auto mode (e.g. on-save), don't attempt mounting
   if (!tryMount) {
     return null;
   }
 
-  // Build authenticated URL if credentials provided
-  let openUrl = url;
+  // Build authenticated URL with credentials so osascript can mount without user interaction
+  let mountUrl = `smb://${parsed.host}/${parsed.share}`;
   if (username) {
     const creds = password
       ? `${encodeURIComponent(username)}:${encodeURIComponent(password)}@`
       : `${encodeURIComponent(username)}@`;
-    openUrl = `smb://${creds}${parsed.host}/${parsed.share}${parsed.subPath ? '/' + parsed.subPath : ''}`;
+    mountUrl = `smb://${creds}${parsed.host}/${parsed.share}`;
   }
 
-  // Try to mount via OS (execFile avoids shell injection)
+  // Use osascript to mount silently with credentials (no Finder dialog)
   try {
-    await execFileAsync('open', [openUrl]);
+    await execFileAsync('osascript', ['-e', `mount volume "${mountUrl}"`]);
   } catch {
-    // open may fail silently if already handling the request
+    // osascript may throw if already mounted or credentials are wrong; polling handles the rest
   }
 
   // Poll up to timeoutMs
