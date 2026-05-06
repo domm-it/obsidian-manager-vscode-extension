@@ -145,6 +145,16 @@ export class TaskTableProvider {
               await this.loadTasks();
               this.sendTasksUpdate();
               break;
+            
+            case 'addNewTask':
+              await this.addNewTask(message.project || '', message.date || '');
+              break;
+            
+            case 'reorderTask':
+              if (message.srcTaskId && message.targetTaskId) {
+                await this.reorderTask(message.srcTaskId, message.targetTaskId, message.insertBefore !== false);
+              }
+              break;
           }
         },
         undefined,
@@ -159,6 +169,16 @@ export class TaskTableProvider {
     // Apply initial filters if provided
     if (filterDate || filterProject || filterHashtag || filterFile) {
       this.sendTasksUpdate(undefined, filterDate, filterProject, filterHashtag, filterFile);
+    } else {
+      // Apply initial projects filter from settings (if no explicit filter was requested)
+      const cfg = vscode.workspace.getConfiguration('obsidianManager');
+      const initialProjects = cfg.get<string[]>('taskTableInitialProjects', ['root']);
+      if (initialProjects.length > 0 && this.panel) {
+        this.panel.webview.postMessage({
+          command: 'projectsSelected',
+          projects: initialProjects
+        });
+      }
     }
   }
 
@@ -196,8 +216,9 @@ export class TaskTableProvider {
     this.tasks = [];
     
     try {
-      const files = await this.findDatePrefixedMarkdownFiles(this.vaultPath);
-      
+      // Load all markdown files from the entire vault recursively
+      const files = await this.findMarkdownFiles(this.vaultPath, false, true);
+
       for (const file of files) {
         const tasks = await this.extractTasksFromFile(file);
         this.tasks.push(...tasks);
@@ -207,35 +228,33 @@ export class TaskTableProvider {
     }
   }
 
-  private async findDatePrefixedMarkdownFiles(dir: string, rootDir: string = '', depth: number = 0): Promise<string[]> {
-    if (!rootDir) {
-      rootDir = dir;
-    }
-
-    // Safety check: prevent infinite recursion
+  /**
+   * Find markdown files in a directory.
+   * @param dir Directory to search
+   * @param dateFilter If true, only include files matching YYYY-MM-DD* pattern
+   * @param recursive If true, search subdirectories recursively
+   */
+  private async findMarkdownFiles(dir: string, dateFilter: boolean, recursive: boolean, depth: number = 0): Promise<string[]> {
     if (depth > 50) {
       return [];
     }
 
     const files: string[] = [];
-    
+    const datePattern = /^\d{4}-\d{2}-\d{2}/;
+
     try {
       const entries = await fs.readdir(dir, { withFileTypes: true });
-      
+
       for (const entry of entries) {
-        // Skip hidden files/folders
-        if (entry.name.startsWith('.')) continue;
-        
+        if (entry.name.startsWith('.')) { continue; }
+
         const fullPath = path.join(dir, entry.name);
-        
-        if (entry.isDirectory()) {
-          // Recursively search subdirectories with incremented depth
-          const subFiles = await this.findDatePrefixedMarkdownFiles(fullPath, rootDir, depth + 1);
+
+        if (entry.isDirectory() && recursive) {
+          const subFiles = await this.findMarkdownFiles(fullPath, dateFilter, recursive, depth + 1);
           files.push(...subFiles);
         } else if (entry.isFile() && entry.name.endsWith('.md')) {
-          // Check if filename starts with YYYY-MM-DD pattern
-          const datePattern = /^\d{4}-\d{2}-\d{2}/;
-          if (datePattern.test(entry.name)) {
+          if (!dateFilter || datePattern.test(entry.name)) {
             files.push(fullPath);
           }
         }
@@ -243,7 +262,7 @@ export class TaskTableProvider {
     } catch (error) {
       console.error(`Error reading directory ${dir}:`, error);
     }
-    
+
     return files;
   }
 
@@ -320,6 +339,7 @@ export class TaskTableProvider {
       // Reload tasks and send updated data without full refresh
       await this.loadTasks();
       this.sendTasksUpdate();
+      vscode.commands.executeCommand('obsidianManager.refreshView');
       
     } catch (error) {
       vscode.window.showErrorMessage(`Error updating task: ${error}`);
@@ -350,9 +370,67 @@ export class TaskTableProvider {
       // Refresh hashtags tree (task text might contain hashtags)
       // Refresh hashtags to update count
       vscode.commands.executeCommand('obsidianManager.refreshHashtags');
+      vscode.commands.executeCommand('obsidianManager.refreshView');
       
     } catch (error) {
       vscode.window.showErrorMessage(`Error updating task text: ${error}`);
+    }
+  }
+
+  private async addNewTask(project: string, date: string) {
+    try {
+      // Determine target folder
+      let targetDir: string;
+      if (!project || project === 'root') {
+        targetDir = this.vaultPath;
+      } else {
+        targetDir = path.join(this.vaultPath, project);
+      }
+
+      // Determine file date: use provided date or today
+      let fileDate: string;
+      if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        fileDate = date;
+      } else {
+        const today = new Date();
+        const y = today.getFullYear();
+        const m = String(today.getMonth() + 1).padStart(2, '0');
+        const d = String(today.getDate()).padStart(2, '0');
+        fileDate = `${y}-${m}-${d}`;
+      }
+
+      const filePath = path.join(targetDir, `${fileDate}.md`);
+
+      // Ensure target directory exists
+      await fs.mkdir(targetDir, { recursive: true });
+
+      // Read existing content or create file with H1 title
+      let fileContent: string;
+      try {
+        fileContent = await fs.readFile(filePath, 'utf-8');
+      } catch {
+        fileContent = `# ${fileDate}\n\n`;
+        await fs.writeFile(filePath, fileContent, 'utf-8');
+      }
+
+      // Append new empty task, removing trailing blank lines first
+      const lines = fileContent.split('\n');
+      while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
+        lines.pop();
+      }
+      lines.push('- [ ] ');
+      lines.push('');
+      await fs.writeFile(filePath, lines.join('\n'), 'utf-8');
+
+      // Reload tasks and focus the new task row
+      await this.loadTasks();
+      const newLineNumber = lines.length - 2; // index of the inserted task line
+      const newTaskId = `${filePath}:${newLineNumber}`;
+      this.sendTasksUpdate(newTaskId);
+      vscode.commands.executeCommand('obsidianManager.refreshView');
+
+    } catch (error) {
+      vscode.window.showErrorMessage(`Error adding task: ${error}`);
     }
   }
 
@@ -445,6 +523,7 @@ export class TaskTableProvider {
       // Refresh hashtags tree (deleted task might have had hashtags)
       // Refresh hashtags to update count
       vscode.commands.executeCommand('obsidianManager.refreshHashtags');
+      vscode.commands.executeCommand('obsidianManager.refreshView');
       
     } catch (error) {
       vscode.window.showErrorMessage(`Error deleting task: ${error}`);
@@ -472,9 +551,53 @@ export class TaskTableProvider {
       // Generate new task ID (filePath:lineNumber)
       const newTaskId = `${task.filePath}:${task.lineNumber + 1}`;
       this.sendTasksUpdate(newTaskId);
+      vscode.commands.executeCommand('obsidianManager.refreshView');
       
     } catch (error) {
       vscode.window.showErrorMessage(`Error adding task: ${error}`);
+    }
+  }
+
+  private async reorderTask(srcTaskId: string, targetTaskId: string, insertBefore: boolean = true) {
+    const src = this.tasks.find(t => t.id === srcTaskId);
+    const target = this.tasks.find(t => t.id === targetTaskId);
+    if (!src || !target) { return; }
+
+    try {
+      if (src.filePath === target.filePath) {
+        const content = await fs.readFile(src.filePath, 'utf-8');
+        const lines = content.split('\n');
+
+        const srcLine = lines[src.lineNumber];
+        lines.splice(src.lineNumber, 1);
+
+        // Recalculate target index after removal
+        let insertIdx = src.lineNumber < target.lineNumber
+          ? target.lineNumber - 1
+          : target.lineNumber;
+        if (!insertBefore) { insertIdx += 1; }
+
+        lines.splice(insertIdx, 0, srcLine);
+        await fs.writeFile(src.filePath, lines.join('\n'), 'utf-8');
+      } else {
+        const srcContent = await fs.readFile(src.filePath, 'utf-8');
+        const srcLines = srcContent.split('\n');
+        const srcLine = srcLines[src.lineNumber];
+        srcLines.splice(src.lineNumber, 1);
+        await fs.writeFile(src.filePath, srcLines.join('\n'), 'utf-8');
+
+        const targetContent = await fs.readFile(target.filePath, 'utf-8');
+        const targetLines = targetContent.split('\n');
+        const insertIdx = insertBefore ? target.lineNumber : target.lineNumber + 1;
+        targetLines.splice(insertIdx, 0, srcLine);
+        await fs.writeFile(target.filePath, targetLines.join('\n'), 'utf-8');
+      }
+
+      await this.loadTasks();
+      this.sendTasksUpdate();
+      vscode.commands.executeCommand('obsidianManager.refreshView');
+    } catch (error) {
+      vscode.window.showErrorMessage(`Error reordering task: ${error}`);
     }
   }
 
@@ -947,7 +1070,7 @@ export class TaskTableProvider {
   private async bulkMoveTasks(taskIds: string[]): Promise<void> {
     try {
       // Get the list of all date-prefixed markdown files in the vault
-      const allFiles = await this.findDatePrefixedMarkdownFiles(this.vaultPath);
+      const allFiles = await this.findMarkdownFiles(this.vaultPath, true, true);
       
       // Create quick pick items with relative paths
       interface FileQuickPickItem extends vscode.QuickPickItem {
@@ -1590,6 +1713,34 @@ export class TaskTableProvider {
       width: 40px;
     }
     
+    .drag-cell {
+      width: 20px;
+      min-width: 20px;
+      text-align: center;
+      padding: 4px 2px !important;
+      cursor: grab;
+    }
+
+    .drag-handle {
+      color: var(--vscode-foreground);
+      opacity: 0.3;
+      font-size: 14px !important;
+      cursor: grab;
+      user-select: none;
+    }
+
+    tr.drag-over-before td {
+      border-top: 2px solid var(--vscode-focusBorder);
+    }
+
+    tr.drag-over-after td {
+      border-bottom: 2px solid var(--vscode-focusBorder);
+    }
+
+    tr.dragging {
+      opacity: 0.4;
+    }
+
     .select-cell {
       text-align: center;
       width: 40px;
@@ -1895,14 +2046,14 @@ export class TaskTableProvider {
       opacity: 1;
     }
     
-    .reload-icon {
+    .reload-icon, .create-file-icon {
       cursor: pointer;
       color: var(--vscode-foreground);
       opacity: 0.7;
       font-size: 14px !important;
     }
     
-    .reload-icon:hover {
+    .reload-icon:hover, .create-file-icon:hover {
       opacity: 1;
       color: var(--vscode-textLink-activeForeground);
     }
@@ -2034,6 +2185,7 @@ export class TaskTableProvider {
     <table id="tasksTable">
       <thead>
         <tr>
+          <th class="drag-cell"></th>
           <th class="select-cell">
             <input type="checkbox" id="selectAllCheckbox" class="select-checkbox" title="Select all tasks" />
           </th>
@@ -2043,7 +2195,9 @@ export class TaskTableProvider {
           <th class="task-cell">TASK</th>
           <th class="tags-cell">TAGS</th>
           <th class="move-cell"></th>
-          <th class="insert-cell"></th>
+          <th class="insert-cell">
+            <span class="codicon codicon-add create-file-icon" title="Create daily file for selected date in selected project"></span>
+          </th>
           <th class="actions-cell">
             <span class="codicon codicon-refresh reload-icon" title="Reload tasks"></span>
           </th>
@@ -2051,7 +2205,10 @@ export class TaskTableProvider {
       </thead>
       <tbody>
         ${tasks.map((task, index) => `
-          <tr data-task-id="${escapeHtml(task.id)}" data-index="${index}" data-project="${escapeHtml(task.project)}" data-file="${escapeHtml(path.basename(task.filePath))}" data-filepath="${escapeHtml(task.filePath)}" data-line-number="${task.lineNumber}" class="${task.status ? 'task-completed' : ''}">
+          <tr draggable="true" data-task-id="${escapeHtml(task.id)}" data-index="${index}" data-project="${escapeHtml(task.project)}" data-file="${escapeHtml(path.basename(task.filePath))}" data-filepath="${escapeHtml(task.filePath)}" data-line-number="${task.lineNumber}" class="${task.status ? 'task-completed' : ''}">
+            <td class="drag-cell">
+              <span class="codicon codicon-gripper drag-handle" title="Drag to reorder"></span>
+            </td>
             <td class="select-cell">
               <input type="checkbox" class="select-checkbox task-select-checkbox" data-task-id="${escapeHtml(task.id)}" />
             </td>
@@ -2297,13 +2454,23 @@ export class TaskTableProvider {
       if (e.target.classList.contains('task-input')) {
         const row = e.target.closest('tr');
         if (!row) return;
-        
+
+        // Update tags cell immediately in the DOM from the new text
+        const newText = e.target.value;
+        const tagsCell = row.querySelector('.tags-cell');
+        if (tagsCell) {
+          const tags = extractTags(newText);
+          tagsCell.innerHTML = tags.map(tag =>
+            '<span class="tag" data-tag="' + escapeHtml(tag) + '">' + escapeHtml(tag) + '<span class="tag-remove">\u00d7</span></span>'
+          ).join('');
+        }
+
         const taskId = row.getAttribute('data-task-id');
         if (taskId) {
           vscode.postMessage({
             command: 'updateTask',
             taskId: taskId,
-            newText: e.target.value
+            newText: newText
           });
         }
       }
@@ -2407,6 +2574,17 @@ export class TaskTableProvider {
           command: 'reloadTasks'
         });
       }
+
+      // Click on create file icon in header
+      if (e.target.classList.contains('create-file-icon')) {
+        const project = currentFilter.length === 1 ? currentFilter[0] : '';
+        const date = currentDateFilter || '';
+        vscode.postMessage({
+          command: 'addNewTask',
+          project: project,
+          date: date
+        });
+      }
       
       // Click on tag remove button
       if (e.target.classList.contains('tag-remove')) {
@@ -2479,7 +2657,10 @@ export class TaskTableProvider {
         const completedClass = task.status ? ' task-completed' : '';
         
         return \`
-        <tr data-task-id="\${task.id}" data-project="\${task.project}" data-file="\${filename}" data-filepath="\${task.filePath}" data-line-number="\${task.lineNumber}" class="\${completedClass.trim()}">
+        <tr draggable="true" data-task-id="\${task.id}" data-project="\${task.project}" data-file="\${filename}" data-filepath="\${task.filePath}" data-line-number="\${task.lineNumber}" class="\${completedClass.trim()}">
+          <td class="drag-cell">
+            <span class="codicon codicon-gripper drag-handle" title="Drag to reorder"></span>
+          </td>
           <td class="select-cell">
             <input type="checkbox" class="select-checkbox task-select-checkbox" data-task-id="\${task.id}" \${isSelected ? 'checked' : ''} />
           </td>
@@ -2682,10 +2863,115 @@ export class TaskTableProvider {
       rows.forEach(row => tbody.appendChild(row));
     }
     
+    // Drag-and-drop row reordering
+    let dragSrcRow = null;
+    let dragFromHandle = false;
+
+    // Track whether the drag originated from the gripper handle
+    document.addEventListener('mousedown', function(e) {
+      dragFromHandle = !!e.target.closest('.drag-handle');
+    });
+
+    function clearDragIndicators() {
+      document.querySelectorAll('tr.drag-over-before, tr.drag-over-after').forEach(r => {
+        r.classList.remove('drag-over-before', 'drag-over-after');
+      });
+    }
+
+    document.addEventListener('dragstart', function(e) {
+      // Only allow drag when starting from the drag handle
+      if (!dragFromHandle) {
+        e.preventDefault();
+        return;
+      }
+      const row = e.target.closest('tr[draggable]');
+      if (!row) return;
+      dragSrcRow = row;
+      row.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', ''); // required for Firefox
+    });
+
+    document.addEventListener('dragover', function(e) {
+      const row = e.target.closest('tr[draggable]');
+      if (!row || row === dragSrcRow) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+
+      // Determine insert position: top half = before, bottom half = after
+      const rect = row.getBoundingClientRect();
+      const insertBefore = e.clientY < rect.top + rect.height / 2;
+
+      clearDragIndicators();
+      row.classList.add(insertBefore ? 'drag-over-before' : 'drag-over-after');
+    });
+
+    document.addEventListener('dragleave', function(e) {
+      const row = e.target.closest('tr[draggable]');
+      if (!row) return;
+      // Only clear if the mouse is truly leaving the row (not moving to a child element)
+      if (!row.contains(e.relatedTarget)) {
+        row.classList.remove('drag-over-before', 'drag-over-after');
+      }
+    });
+
+    document.addEventListener('dragend', function(e) {
+      clearDragIndicators();
+      if (dragSrcRow) { dragSrcRow.classList.remove('dragging'); }
+      dragSrcRow = null;
+    });
+
+    document.addEventListener('drop', function(e) {
+      const targetRow = e.target.closest('tr[draggable]');
+      if (!targetRow || !dragSrcRow || targetRow === dragSrcRow) return;
+      e.preventDefault();
+      const tbody = targetRow.closest('tbody');
+      if (!tbody) return;
+
+      const rect = targetRow.getBoundingClientRect();
+      const insertBefore = e.clientY < rect.top + rect.height / 2;
+
+      const srcTaskId = dragSrcRow.getAttribute('data-task-id');
+      const targetTaskId = targetRow.getAttribute('data-task-id');
+
+      // DOM update for immediate visual feedback
+      if (insertBefore) {
+        tbody.insertBefore(dragSrcRow, targetRow);
+      } else {
+        tbody.insertBefore(dragSrcRow, targetRow.nextSibling);
+      }
+
+      dragSrcRow.classList.remove('dragging');
+      clearDragIndicators();
+      dragSrcRow = null;
+
+      // Persist reorder to file
+      if (srcTaskId && targetTaskId) {
+        vscode.postMessage({
+          command: 'reorderTask',
+          srcTaskId: srcTaskId,
+          targetTaskId: targetTaskId,
+          insertBefore: insertBefore
+        });
+      }
+    });
+
     // Listen for updates from extension
     window.addEventListener('message', event => {
       const message = event.data;
       if (message.command === 'updateTasks') {
+        // If a task input is currently focused, defer the rebuild until it blurs
+        // to avoid destroying the DOM and losing focus while the user is typing
+        const focusedInput = document.activeElement;
+        if (focusedInput && focusedInput.classList.contains('task-input')) {
+          const deferredHandler = () => {
+            focusedInput.removeEventListener('blur', deferredHandler);
+            window.dispatchEvent(new MessageEvent('message', { data: message }));
+          };
+          focusedInput.addEventListener('blur', deferredHandler);
+          return;
+        }
+
         // Clean up selectedTaskIds - remove any that no longer exist in the task list
         const taskIds = new Set(message.tasks.map(t => t.id));
         const idsToRemove = [];

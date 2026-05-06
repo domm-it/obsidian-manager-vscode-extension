@@ -682,6 +682,14 @@
           "default": true,
           "description": "Hide completed tasks by default when opening the Task Table."
         },
+        "obsidianManager.taskTableInitialProjects": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": ["root"],
+          "description": "Folders to include in the Task Table. Use 'root' to include only date-prefixed files (YYYY-MM-DD*) from the vault root. Use other folder names to include all markdown files from those folders recursively. An empty array [] includes all markdown files from the entire vault."
+        },
         "obsidianManager.newFileOpenMode": {
           "type": "string",
           "enum": [
