@@ -2,7 +2,7 @@
   "name": "obsidian-manager",
   "displayName": "Obsidian Manager",
   "description": "Adds a button and a vault/file manager view to open and manage Markdown files with Obsidian.",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "publisher": "domm-it",
   "icon": "images/logo.png",
   "author": {
@@ -687,7 +687,9 @@
           "items": {
             "type": "string"
           },
-          "default": ["root"],
+          "default": [
+            "root"
+          ],
           "description": "Folders to include in the Task Table. Use 'root' to include only date-prefixed files (YYYY-MM-DD*) from the vault root. Use other folder names to include all markdown files from those folders recursively. An empty array [] includes all markdown files from the entire vault."
         },
         "obsidianManager.newFileOpenMode": {
