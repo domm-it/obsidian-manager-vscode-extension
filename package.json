@@ -682,6 +682,11 @@
           "default": true,
           "description": "Hide completed tasks by default when opening the Task Table."
         },
+        "obsidianManager.taskTableIncludeNonDateFiles": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include tasks from markdown files whose name does not start with a date (YYYY-MM-DD). By default only date-prefixed files are included."
+        },
         "obsidianManager.taskTableInitialProjects": {
           "type": "array",
           "items": {

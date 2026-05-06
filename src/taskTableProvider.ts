@@ -216,8 +216,10 @@ export class TaskTableProvider {
     this.tasks = [];
     
     try {
-      // Load all markdown files from the entire vault recursively
-      const files = await this.findMarkdownFiles(this.vaultPath, false, true);
+      const cfg = vscode.workspace.getConfiguration('obsidianManager');
+      const includeNonDateFiles = cfg.get<boolean>('taskTableIncludeNonDateFiles', false);
+      // dateFilter=true excludes non-date files; invert the setting
+      const files = await this.findMarkdownFiles(this.vaultPath, !includeNonDateFiles, true);
 
       for (const file of files) {
         const tasks = await this.extractTasksFromFile(file);
@@ -1503,6 +1505,48 @@ export class TaskTableProvider {
     .filters-secondary {
       margin-top: 12px;
     }
+
+    .group-header-row td {
+      padding: 6px 8px 2px 8px !important;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--vscode-descriptionForeground);
+      background: var(--vscode-sideBar-background);
+      border-top: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.2));
+      user-select: none;
+      position: sticky;
+      z-index: 5;
+    }
+
+    .group-header-cell-inner {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .group-header-label {
+      cursor: pointer;
+    }
+    .group-header-label:hover {
+      text-decoration: underline;
+    }
+
+    .group-collapse-btn {
+      cursor: pointer;
+      font-size: 12px;
+      padding: 0 4px;
+      opacity: 0.7;
+      flex-shrink: 0;
+    }
+    .group-collapse-btn:hover {
+      opacity: 1;
+    }
+
+    .group-header-row:first-child td {
+      border-top: none;
+    }
     
     .filter-group {
       display: flex;
@@ -2110,9 +2154,6 @@ export class TaskTableProvider {
 
       <div class="title-container">
         <h1>Tasks <span class="task-count" id="taskCount"></span></h1>
-        <button id="toggleMultiselectBtn" class="toggle-multiselect-btn" title="Enable/disable multi-task selection">
-          <span class="codicon codicon-checklist"></span>
-        </button>
       </div>
 
       <!-- Bulk Actions Toolbar -->
@@ -2171,6 +2212,15 @@ export class TaskTableProvider {
           </fieldset>
         </div>
         <div class="filter-group">
+          <label for="groupBySelect">Group:</label>
+          <select id="groupBySelect" style="padding: 3px 6px;">
+            <option value="none">None</option>
+            <option value="project">Project</option>
+            <option value="date">Date</option>
+            <option value="file">File</option>
+          </select>
+        </div>
+        <div class="filter-group">
           <button id="resetAllFilters" title="Reset all filters" style="padding: 4px 12px; cursor: pointer; background-color: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 2px;">RESET</button>
         </div>
       </div>
@@ -2185,7 +2235,11 @@ export class TaskTableProvider {
     <table id="tasksTable">
       <thead>
         <tr>
-          <th class="drag-cell"></th>
+          <th class="drag-cell">
+            <button id="toggleMultiselectBtn" class="toggle-multiselect-btn" title="Enable/disable multi-task selection">
+              <span class="codicon codicon-checklist"></span>
+            </button>
+          </th>
           <th class="select-cell">
             <input type="checkbox" id="selectAllCheckbox" class="select-checkbox" title="Select all tasks" />
           </th>
@@ -2267,6 +2321,8 @@ export class TaskTableProvider {
     
     // Preserve state - default sort by date descending
     let currentSort = { column: 'date', direction: 'desc' };
+    let currentGroupBy = 'none'; // 'none' | 'project' | 'date' | 'file'
+    const collapsedGroups = new Set(); // group keys currently collapsed
     let currentFilter = []; // Array of selected projects
     let currentHideCompleted = ${hideCompletedDefault};
     let currentSearchText = '';
@@ -2763,7 +2819,7 @@ export class TaskTableProvider {
     }
     
     function applyFilter() {
-      const rows = document.querySelectorAll('#tasksTable tbody tr');
+      const rows = document.querySelectorAll('#tasksTable tbody tr:not(.group-header-row)');
       const searchLower = currentSearchText.toLowerCase();
       let visibleCount = 0;
       
@@ -2801,7 +2857,11 @@ export class TaskTableProvider {
         
         const shouldShow = matchesProject && matchesDate && matchesFile && matchesSearch && (!currentHideCompleted || !isCompleted);
         
-        row.style.display = shouldShow ? '' : 'none';
+        if (shouldShow) {
+          row.removeAttribute('data-filter-hidden');
+        } else {
+          row.setAttribute('data-filter-hidden', '1');
+        }
         if (shouldShow) visibleCount++;
       });
       
@@ -2813,13 +2873,158 @@ export class TaskTableProvider {
       
       // Update "Select All" checkbox state after filtering
       updateSelectAllCheckbox();
+
+      // Apply grouping after filter
+      applyGrouping();
     }
+
+    function getGroupKey(row) {
+      if (currentGroupBy === 'project') return row.getAttribute('data-project') || '';
+      if (currentGroupBy === 'date') return row.querySelector('.date-cell')?.textContent?.trim() || '';
+      if (currentGroupBy === 'file') return row.getAttribute('data-file') || '';
+      return '';
+    }
+
+    function applyGrouping() {
+      // Remove existing group header rows
+      document.querySelectorAll('#tasksTable tbody tr.group-header-row').forEach(r => r.remove());
+
+      const tbody = document.querySelector('#tasksTable tbody');
+      if (!tbody) return;
+
+      const allRows = Array.from(tbody.querySelectorAll('tr[data-task-id]'));
+
+      if (currentGroupBy === 'none') {
+        // No grouping: just show/hide based on filter attribute
+        allRows.forEach(r => { r.style.display = r.hasAttribute('data-filter-hidden') ? 'none' : ''; });
+        return;
+      }
+      // "visible" = not hidden by filter (may still be collapsed)
+      const visibleRows = allRows.filter(r => !r.hasAttribute('data-filter-hidden'));
+
+      // Filter-hidden rows: always display:none, send to end of tbody
+      const hiddenRows = allRows.filter(r => r.hasAttribute('data-filter-hidden'));
+      hiddenRows.forEach(r => { r.style.display = 'none'; });
+
+      if (visibleRows.length === 0) {
+        hiddenRows.forEach(r => tbody.appendChild(r));
+        return;
+      }
+
+      // Group visible rows into an ordered Map: key → rows[] (preserving within-group DOM order)
+      const groupMap = new Map();
+      visibleRows.forEach(row => {
+        const key = getGroupKey(row);
+        if (!groupMap.has(key)) groupMap.set(key, []);
+        groupMap.get(key).push(row);
+      });
+
+      // Sort group keys alphabetically, but always pin 'root' first
+      const sortedKeys = Array.from(groupMap.keys()).sort((a, b) => {
+        if (a === 'root') return -1;
+        if (b === 'root') return 1;
+        return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+      });
+
+      // Re-order visible rows by sorted groups; filter-hidden rows go to end
+      sortedKeys.forEach(key => groupMap.get(key).forEach(r => tbody.appendChild(r)));
+      hiddenRows.forEach(r => tbody.appendChild(r));
+
+      // Compute sticky top offset = thead height
+      const theadHeight = document.querySelector('#tasksTable thead')?.getBoundingClientRect().height || 0;
+
+      // Insert group header before the first row of each group
+      sortedKeys.forEach(key => {
+        const firstRow = groupMap.get(key)[0];
+        const isCollapsed = collapsedGroups.has(key);
+
+        // Apply collapsed state to rows (only those not filter-hidden)
+        groupMap.get(key).forEach(r => {
+          r.style.display = isCollapsed ? 'none' : '';
+        });
+
+        const headerRow = document.createElement('tr');
+        headerRow.className = 'group-header-row';
+        const td = document.createElement('td');
+        td.colSpan = 10;
+        td.className = 'group-header-cell';
+        td.setAttribute('data-group-key', key);
+        td.setAttribute('data-group-type', currentGroupBy);
+        td.style.top = theadHeight + 'px';
+
+        const inner = document.createElement('div');
+        inner.className = 'group-header-cell-inner';
+
+        const label = document.createElement('span');
+        label.className = 'group-header-label';
+        label.textContent = key || '(none)';
+        label.title = 'Click to filter by this group';
+
+        const arrow = document.createElement('span');
+        arrow.className = 'group-collapse-btn';
+        arrow.textContent = isCollapsed ? '▸' : '▾';
+        arrow.title = isCollapsed ? 'Expand group' : 'Collapse group';
+        arrow.setAttribute('data-collapse-key', key);
+
+        inner.appendChild(arrow);
+        inner.appendChild(label);
+        td.appendChild(inner);
+        headerRow.appendChild(td);
+        tbody.insertBefore(headerRow, firstRow);
+      });
+    }
+
+    // Click on group header: label → filter, anything else on the cell → collapse/expand
+    document.querySelector('#tasksTable tbody')?.addEventListener('click', function(e) {
+      const td = e.target.closest('td.group-header-cell');
+      if (!td) return;
+
+      const groupKey = td.getAttribute('data-group-key') || '';
+      const groupType = td.getAttribute('data-group-type');
+
+      // Filter via label — toggle: if already filtering this group, clear it
+      const label = e.target.closest('.group-header-label');
+      if (label) {
+        if (groupType === 'project') {
+          const alreadyFiltered = currentFilter.length === 1 && currentFilter[0] === groupKey;
+          currentFilter = alreadyFiltered ? [] : (groupKey ? [groupKey] : []);
+          const projectFilterDisplay = document.getElementById('projectFilterDisplay');
+          if (projectFilterDisplay) {
+            projectFilterDisplay.value = currentFilter[0] || '';
+            projectFilterDisplay.placeholder = currentFilter.length ? '' : 'All Projects';
+          }
+        } else if (groupType === 'date') {
+          const alreadyFiltered = currentDateFilter === groupKey;
+          currentDateFilter = alreadyFiltered ? '' : groupKey;
+          const dateInput = document.getElementById('dateFilter');
+          if (dateInput) { dateInput.value = currentDateFilter; }
+        } else if (groupType === 'file') {
+          const alreadyFiltered = currentFileFilter.length === 1 && currentFileFilter[0] === groupKey;
+          currentFileFilter = alreadyFiltered ? [] : (groupKey ? [groupKey] : []);
+          const fileFilterDisplay = document.getElementById('fileFilterDisplay');
+          if (fileFilterDisplay) {
+            fileFilterDisplay.value = currentFileFilter[0] || '';
+            fileFilterDisplay.placeholder = currentFileFilter.length ? '' : 'All Files';
+          }
+        }
+        applyFilter();
+        return;
+      }
+
+      // Anywhere else on the cell (including arrow) → toggle collapse
+      if (collapsedGroups.has(groupKey)) {
+        collapsedGroups.delete(groupKey);
+      } else {
+        collapsedGroups.add(groupKey);
+      }
+      applyGrouping();
+    });
     
     function applySorting() {
       const tbody = document.querySelector('#tasksTable tbody');
       if (!tbody) return;
       
-      const rows = Array.from(tbody.querySelectorAll('tr'));
+      const rows = Array.from(tbody.querySelectorAll('tr')).filter(r => !r.classList.contains('group-header-row'));
       
       rows.sort((a, b) => {
         let aVal, bVal;
@@ -2861,7 +3066,17 @@ export class TaskTableProvider {
       });
       
       rows.forEach(row => tbody.appendChild(row));
+
+      // Re-apply grouping if active
+      applyGrouping();
     }
+
+    // Group by select handler
+    document.getElementById('groupBySelect')?.addEventListener('change', function() {
+      currentGroupBy = this.value;
+      collapsedGroups.clear(); // reset collapsed state on groupBy change
+      applyGrouping();
+    });
     
     // Drag-and-drop row reordering
     let dragSrcRow = null;
@@ -2895,6 +3110,14 @@ export class TaskTableProvider {
     document.addEventListener('dragover', function(e) {
       const row = e.target.closest('tr[draggable]');
       if (!row || row === dragSrcRow) return;
+
+      // Block cross-group drag when grouping is active
+      if (currentGroupBy !== 'none' && dragSrcRow && getGroupKey(row) !== getGroupKey(dragSrcRow)) {
+        e.dataTransfer.dropEffect = 'none';
+        clearDragIndicators();
+        return;
+      }
+
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
 
@@ -2924,6 +3147,15 @@ export class TaskTableProvider {
     document.addEventListener('drop', function(e) {
       const targetRow = e.target.closest('tr[draggable]');
       if (!targetRow || !dragSrcRow || targetRow === dragSrcRow) return;
+
+      // Block cross-group drop when grouping is active
+      if (currentGroupBy !== 'none' && getGroupKey(targetRow) !== getGroupKey(dragSrcRow)) {
+        clearDragIndicators();
+        dragSrcRow.classList.remove('dragging');
+        dragSrcRow = null;
+        return;
+      }
+
       e.preventDefault();
       const tbody = targetRow.closest('tbody');
       if (!tbody) return;
