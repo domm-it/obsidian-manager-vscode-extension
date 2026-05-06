@@ -2,7 +2,7 @@
   "name": "obsidian-manager",
   "displayName": "Obsidian Manager",
   "description": "Adds a button and a vault/file manager view to open and manage Markdown files with Obsidian.",
-  "version": "1.7.2",
+  "version": "1.7.3",
   "publisher": "domm-it",
   "icon": "images/logo.png",
   "author": {
@@ -699,14 +699,25 @@
         },
         "obsidianManager.taskTableInitialGroupBy": {
           "type": "string",
-          "enum": ["none", "project", "date", "file"],
+          "enum": [
+            "none",
+            "project",
+            "date",
+            "file"
+          ],
           "default": "none",
           "description": "Default grouping for the Task Table when it opens. 'none' = no grouping, 'project' = group by project folder, 'date' = group by date, 'file' = group by file."
         },
         "obsidianManager.taskTableInitialDateFilter": {
           "type": "string",
-          "enum": ["", "today"],
-          "enumDescriptions": ["No date filter (show all tasks)", "Show only tasks for today's date (dynamically computed)"],
+          "enum": [
+            "",
+            "today"
+          ],
+          "enumDescriptions": [
+            "No date filter (show all tasks)",
+            "Show only tasks for today's date (dynamically computed)"
+          ],
           "default": "today",
           "description": "Initial date filter for the Task Table. 'today' dynamically filters to the current date when the table opens."
         },
