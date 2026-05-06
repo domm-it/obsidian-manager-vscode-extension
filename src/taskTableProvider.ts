@@ -81,6 +81,11 @@ export class TaskTableProvider {
                 await this.addTaskAfter(message.taskId);
               }
               break;
+            case 'addTaskBefore':
+              if (message.taskId) {
+                await this.addTaskBefore(message.taskId);
+              }
+              break;
 
             case 'deleteTask':
               if (message.taskId) {
@@ -98,6 +103,21 @@ export class TaskTableProvider {
             case 'moveTask':
               if (message.taskId) {
                 await this.moveTask(message.taskId);
+              }
+              break;
+            case 'rescheduleTask':
+              if (message.taskId && message.newDate) {
+                await this.rescheduleTask(message.taskId, message.newDate);
+              }
+              break;
+            case 'requestReschedule':
+              if (message.taskId) {
+                await this.requestReschedule(message.taskId, message.currentDate || '');
+              }
+              break;
+            case 'requestChangeProject':
+              if (message.taskId) {
+                await this.requestChangeProject(message.taskId);
               }
               break;
             
@@ -177,6 +197,29 @@ export class TaskTableProvider {
         this.panel.webview.postMessage({
           command: 'projectsSelected',
           projects: initialProjects
+        });
+      }
+
+      // Apply initial groupBy from settings
+      const initialGroupBy = cfg.get<string>('taskTableInitialGroupBy', 'none');
+      if (initialGroupBy !== 'none' && this.panel) {
+        this.panel.webview.postMessage({
+          command: 'setGroupBy',
+          groupBy: initialGroupBy
+        });
+      }
+
+      // Apply initial date filter from settings
+      const initialDateFilter = cfg.get<string>('taskTableInitialDateFilter', 'today');
+      if (initialDateFilter === 'today' && this.panel) {
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        const todayStr = `${yyyy}-${mm}-${dd}`;
+        this.panel.webview.postMessage({
+          command: 'setDateFilter',
+          date: todayStr
         });
       }
     }
@@ -285,13 +328,32 @@ export class TaskTableProvider {
       const parts = relativePath.split(path.sep);
       const project = parts.length > 1 ? parts[0] : 'root';
       
-      // Parse tasks
-      lines.forEach((line, index) => {
-        const todoMatch = line.match(/^[\s-]*- \[ \]\s*(.+)$/);
-        const doneMatch = line.match(/^[\s-]*- \[x\]\s*(.+)$/i);
+      // Parse tasks - use for loop to skip continuation lines already consumed
+      const skipLines = new Set<number>();
+      for (let index = 0; index < lines.length; index++) {
+        if (skipLines.has(index)) { continue; }
+        const line = lines[index];
+        const todoMatch = line.match(/^([\s]*- \[ \])\s*(.*)$/);
+        const doneMatch = line.match(/^([\s]*- \[x\])\s*(.*)/i);
         
         if (todoMatch || doneMatch) {
-          const taskText = todoMatch ? todoMatch[1] : doneMatch![1];
+          const firstLineText = todoMatch ? todoMatch[2] : doneMatch![2];
+          const textParts = [firstLineText];
+          
+          // Collect tab-indented continuation lines
+          let j = index + 1;
+          while (j < lines.length) {
+            const nextLine = lines[j];
+            if (nextLine.startsWith('\t') && !nextLine.match(/^\t*- \[[ x]\]/i)) {
+              textParts.push(nextLine.replace(/^\t/, ''));
+              skipLines.add(j);
+              j++;
+            } else {
+              break;
+            }
+          }
+
+          const taskText = textParts.join('\n').trim();
           const status = !!doneMatch;
           const id = `${filePath}:${index}`;
           
@@ -300,13 +362,13 @@ export class TaskTableProvider {
             status,
             date,
             project,
-            task: taskText.trim(),
+            task: taskText,
             filePath,
             lineNumber: index,
             originalLine: line,
           });
         }
-      });
+      }
     } catch (error) {
       console.error(`Error extracting tasks from ${filePath}:`, error);
     }
@@ -361,8 +423,25 @@ export class TaskTableProvider {
       const line = lines[task.lineNumber];
       const checkbox = task.status ? '- [x]' : '- [ ]';
       const indent = line.match(/^(\s*)/)?.[1] || '';
-      
-      lines[task.lineNumber] = `${indent}${checkbox} ${newText}`;
+
+      // Count existing continuation lines (tab-indented, non-task lines)
+      let continuationCount = 0;
+      for (let i = task.lineNumber + 1; i < lines.length; i++) {
+        if (lines[i].startsWith('\t') && !lines[i].match(/^\t*- \[[ x]\]/i)) {
+          continuationCount++;
+        } else {
+          break;
+        }
+      }
+
+      // Build replacement: first line is the task, rest are tab-indented continuations
+      const textLines = newText.split('\n');
+      const replacementLines = [
+        `${indent}${checkbox} ${textLines[0]}`,
+        ...textLines.slice(1).map(l => `${indent}\t${l}`)
+      ];
+
+      lines.splice(task.lineNumber, 1 + continuationCount, ...replacementLines);
       await fs.writeFile(task.filePath, lines.join('\n'), 'utf-8');
       
       // Reload tasks and send updated data without full refresh
@@ -560,6 +639,32 @@ export class TaskTableProvider {
     }
   }
 
+  private async addTaskBefore(taskId: string) {
+    const task = this.tasks.find(t => t.id === taskId);
+    if (!task) {
+      return;
+    }
+
+    try {
+      const content = await fs.readFile(task.filePath, 'utf-8');
+      const lines = content.split('\n');
+
+      // Insert new empty task line before the current task
+      lines.splice(task.lineNumber, 0, '- [ ] ');
+
+      await fs.writeFile(task.filePath, lines.join('\n'), 'utf-8');
+
+      await this.loadTasks();
+
+      const newTaskId = `${task.filePath}:${task.lineNumber}`;
+      this.sendTasksUpdate(newTaskId);
+      vscode.commands.executeCommand('obsidianManager.refreshView');
+
+    } catch (error) {
+      vscode.window.showErrorMessage(`Error adding task: ${error}`);
+    }
+  }
+
   private async reorderTask(srcTaskId: string, targetTaskId: string, insertBefore: boolean = true) {
     const src = this.tasks.find(t => t.id === srcTaskId);
     const target = this.tasks.find(t => t.id === targetTaskId);
@@ -600,6 +705,166 @@ export class TaskTableProvider {
       vscode.commands.executeCommand('obsidianManager.refreshView');
     } catch (error) {
       vscode.window.showErrorMessage(`Error reordering task: ${error}`);
+    }
+  }
+
+  private async requestReschedule(taskId: string, currentDate: string) {
+    const result = await vscode.window.showInputBox({
+      title: 'Reschedule task',
+      prompt: 'Enter new date (YYYY-MM-DD)',
+      value: currentDate,
+      validateInput: (v) => /^\d{4}-\d{2}-\d{2}$/.test(v.trim()) ? null : 'Format must be YYYY-MM-DD'
+    });
+    if (!result) { return; }
+    const newDate = result.trim();
+    if (newDate !== currentDate) {
+      await this.rescheduleTask(taskId, newDate);
+    }
+  }
+
+  private async requestChangeProject(taskId: string) {
+    const task = this.tasks.find(t => t.id === taskId);
+    if (!task) { return; }
+
+    // Collect all projects (top-level folders in vault + 'root')
+    const projects: string[] = ['root'];
+    try {
+      const entries = await fs.readdir(this.vaultPath, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory() && !entry.name.startsWith('.')) {
+          projects.push(entry.name);
+        }
+      }
+    } catch (e) { /* ignore */ }
+
+    const items: vscode.QuickPickItem[] = projects.map(p => ({
+      label: p,
+      description: p === task.project ? '(current)' : undefined,
+      picked: p === task.project
+    }));
+
+    const selected = await vscode.window.showQuickPick(items, {
+      title: 'Move task to project',
+      placeHolder: 'Select target project'
+    });
+    if (!selected || selected.label === task.project) { return; }
+
+    await this.moveTaskToProject(taskId, selected.label);
+  }
+
+  private async moveTaskToProject(taskId: string, newProject: string) {
+    const task = this.tasks.find(t => t.id === taskId);
+    if (!task) { return; }
+
+    try {
+      const content = await fs.readFile(task.filePath, 'utf-8');
+      const lines = content.split('\n');
+
+      // Collect task line + tab-indented continuation lines
+      const taskLines: string[] = [lines[task.lineNumber]];
+      let j = task.lineNumber + 1;
+      while (j < lines.length) {
+        const nextLine = lines[j];
+        if (nextLine.startsWith('\t') && !nextLine.match(/^\t*- \[[ x]\]/i)) {
+          taskLines.push(nextLine);
+          j++;
+        } else { break; }
+      }
+
+      // Target dir
+      const targetDir = newProject === 'root'
+        ? this.vaultPath
+        : path.join(this.vaultPath, newProject);
+      await fs.mkdir(targetDir, { recursive: true });
+
+      const targetFilePath = path.join(targetDir, `${task.date || 'tasks'}.md`);
+
+      const cfg = vscode.workspace.getConfiguration('obsidianManager');
+      let targetContent = '';
+      try {
+        targetContent = await fs.readFile(targetFilePath, 'utf-8');
+      } catch (_e) {
+        const addTitle = cfg.get<boolean>('addTitleToNewFiles', true);
+        targetContent = addTitle ? `# ${task.date || 'tasks'}\n\n` : '';
+        await fs.writeFile(targetFilePath, targetContent, 'utf-8');
+      }
+
+      const separator = targetContent.endsWith('\n') || targetContent === '' ? '' : '\n';
+      await fs.writeFile(targetFilePath, targetContent + separator + taskLines.join('\n') + '\n', 'utf-8');
+
+      lines.splice(task.lineNumber, taskLines.length);
+      await fs.writeFile(task.filePath, lines.join('\n'), 'utf-8');
+
+      await this.loadTasks();
+      this.sendTasksUpdate();
+      vscode.commands.executeCommand('obsidianManager.refreshHashtags');
+      vscode.commands.executeCommand('obsidianManager.refreshView');
+      vscode.window.showInformationMessage(`Task spostato in ${newProject}/${path.basename(targetFilePath)}`);
+    } catch (error) {
+      vscode.window.showErrorMessage(`Error moving task to project: ${error}`);
+    }
+  }
+
+  private async rescheduleTask(taskId: string, newDate: string) {
+    const task = this.tasks.find(t => t.id === taskId);
+    if (!task) { return; }
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
+      vscode.window.showErrorMessage('Invalid date format');
+      return;
+    }
+
+    if (newDate === task.date) { return; }
+
+    try {
+      const content = await fs.readFile(task.filePath, 'utf-8');
+      const lines = content.split('\n');
+
+      // Collect task line + tab-indented continuation lines
+      const taskLines: string[] = [lines[task.lineNumber]];
+      let j = task.lineNumber + 1;
+      while (j < lines.length) {
+        const nextLine = lines[j];
+        if (nextLine.startsWith('\t') && !nextLine.match(/^\t*- \[[ x]\]/i)) {
+          taskLines.push(nextLine);
+          j++;
+        } else {
+          break;
+        }
+      }
+
+      // Target file: same project directory, named YYYY-MM-DD.md
+      const targetDir = path.dirname(task.filePath);
+      const targetFilePath = path.join(targetDir, `${newDate}.md`);
+
+      let targetContent = '';
+      try {
+        targetContent = await fs.readFile(targetFilePath, 'utf-8');
+      } catch (_e) {
+        // File doesn't exist — create it
+        const cfg = vscode.workspace.getConfiguration('obsidianManager');
+        const addTitle = cfg.get<boolean>('addTitleToNewFiles', true);
+        targetContent = addTitle ? `# ${newDate}\n\n` : '';
+        await fs.writeFile(targetFilePath, targetContent, 'utf-8');
+      }
+
+      // Append task to target file
+      const separator = targetContent.endsWith('\n') || targetContent === '' ? '' : '\n';
+      await fs.writeFile(targetFilePath, targetContent + separator + taskLines.join('\n') + '\n', 'utf-8');
+
+      // Remove task from source file
+      lines.splice(task.lineNumber, taskLines.length);
+      await fs.writeFile(task.filePath, lines.join('\n'), 'utf-8');
+
+      await this.loadTasks();
+      this.sendTasksUpdate();
+      vscode.commands.executeCommand('obsidianManager.refreshHashtags');
+      vscode.commands.executeCommand('obsidianManager.refreshView');
+
+      vscode.window.showInformationMessage(`Task spostato in ${path.basename(targetFilePath)}`);
+
+    } catch (error) {
+      vscode.window.showErrorMessage(`Error rescheduling task: ${error}`);
     }
   }
 
@@ -1317,7 +1582,25 @@ export class TaskTableProvider {
   private async selectProjectsFilter(currentSelection: string[]): Promise<void> {
     try {
       // Get all unique projects from tasks
-      const allProjects = [...new Set(this.tasks.map(t => t.project))].sort();
+      const taskProjects = new Set(this.tasks.map(t => t.project));
+
+      // Also include all direct subdirectories of the vault (even without tasks)
+      const allFolders = new Set<string>(['root']);
+      try {
+        const entries = await fs.readdir(this.vaultPath, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.isDirectory() && !entry.name.startsWith('.')) {
+            allFolders.add(entry.name);
+          }
+        }
+      } catch (_) {}
+
+      // Merge: folders first, then any task-projects not already covered
+      const allProjects = [...new Set([...allFolders, ...taskProjects])].sort((a, b) => {
+        if (a === 'root') return -1;
+        if (b === 'root') return 1;
+        return a.localeCompare(b, undefined, { sensitivity: 'base' });
+      });
       
       if (allProjects.length === 0) {
         vscode.window.showInformationMessage('No projects found');
@@ -1843,12 +2126,13 @@ export class TaskTableProvider {
       opacity: 0.6;
     }
     
-    tr.task-completed .task-input {
+    tr.task-completed .task-input,
+    tr.task-completed .task-render {
       color: var(--vscode-descriptionForeground);
     }
     
     tr.task-completed .date-cell,
-    tr.task-completed .project-cell {
+    tr.task-completed .task-project-label {
       color: var(--vscode-descriptionForeground);
     }
     
@@ -1938,56 +2222,59 @@ export class TaskTableProvider {
       font-family: monospace;
       cursor: pointer;
       color: var(--vscode-textLink-foreground);
+      white-space: nowrap;
+      position: relative;
     }
     
-    .date-cell:hover {
-      text-decoration: underline;
-    }
-    
-    .project-cell {
-      width: 150px;
-      font-weight: 500;
-      color: var(--vscode-textLink-foreground);
-      cursor: pointer;
-    }
-    
-    .project-cell:hover {
+    .date-text:hover {
       text-decoration: underline;
     }
     
     .task-cell {
       width: auto;
     }
-    
+
     .task-cell-content {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 8px;
     }
-    
-    .tags-cell {
-      width: 150px;
-      min-width: 150px;
-      max-width: 150px;
-      overflow-x: auto;
-      white-space: nowrap;
+
+    .task-project-label {
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--vscode-textLink-foreground);
       cursor: pointer;
-      position: relative;
+      margin-top: 2px;
+      display: inline-block;
+    }
+    .task-project-label:hover {
+      text-decoration: underline;
     }
     
-    .tags-cell:hover {
-      background-color: var(--vscode-list-hoverBackground);
+    .task-meta-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 4px;
+      margin-top: 2px;
+      min-height: 16px;
+    }
+
+    .tags-cell {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 2px;
+      cursor: pointer;
+      flex: 1;
     }
     
     .tags-cell:empty:after {
-      content: 'Click to add tags...';
+      content: 'add tags...';
       color: var(--vscode-descriptionForeground);
-      font-size: 11px;
+      font-size: 10px;
       font-style: italic;
-    }
-    
-    .tags-cell::-webkit-scrollbar {
-      height: 4px;
     }
     
     .tag {
@@ -2025,17 +2312,49 @@ export class TaskTableProvider {
       opacity: 1;
     }
     
+    .open-file-cell {
+      width: 28px;
+      min-width: 28px;
+      text-align: center;
+      padding: 4px !important;
+    }
+
     .open-file-icon {
       cursor: pointer;
       color: var(--vscode-textLink-foreground);
       opacity: 0.6;
-      flex-shrink: 0;
     }
     
     .open-file-icon:hover {
       opacity: 1;
     }
-    
+
+    .add-row-cell {
+      padding: 0 !important;
+      border-top: none;
+      border-bottom: none;
+    }
+
+    .add-row-btn {
+      display: block;
+      width: 100%;
+      background: transparent;
+      border: none;
+      border-top: 1px dashed var(--vscode-widget-border, #454545);
+      color: var(--vscode-foreground);
+      opacity: 0.4;
+      cursor: pointer;
+      font-size: 12px;
+      padding: 3px 0;
+      text-align: center;
+      letter-spacing: 0.05em;
+    }
+
+    .add-row-btn:hover {
+      opacity: 1;
+      background-color: var(--vscode-list-hoverBackground);
+    }
+
     .move-cell {
       width: 40px;
       min-width: 40px;
@@ -2108,6 +2427,41 @@ export class TaskTableProvider {
       height: 18px;
     }
     
+    .task-edit-wrapper {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .task-render {
+      width: 100%;
+      padding: 2px;
+      cursor: text;
+      line-height: 1.4;
+      min-height: 1.4em;
+      word-break: break-word;
+      white-space: pre-wrap;
+    }
+    .task-render:hover {
+      background-color: var(--vscode-input-background);
+      border-radius: 2px;
+    }
+    .task-render a {
+      color: var(--vscode-textLink-foreground);
+    }
+    .task-render strong { font-weight: bold; }
+    .task-render em { font-style: italic; }
+    .task-render del { text-decoration: line-through; }
+    .task-render code {
+      background: var(--vscode-textCodeBlock-background);
+      padding: 1px 3px;
+      border-radius: 2px;
+      font-family: var(--vscode-editor-font-family), monospace;
+      font-size: 0.9em;
+    }
+    .task-render .wikilink {
+      color: var(--vscode-textLink-foreground);
+    }
+
     .task-input {
       width: 100%;
       background-color: transparent;
@@ -2117,6 +2471,10 @@ export class TaskTableProvider {
       font-family: inherit;
       font-size: inherit;
       padding: 2px;
+      resize: none;
+      overflow: hidden;
+      line-height: 1.4;
+      display: block;
     }
     
     .task-input:focus {
@@ -2218,6 +2576,7 @@ export class TaskTableProvider {
             <option value="project">Project</option>
             <option value="date">Date</option>
             <option value="file">File</option>
+            <option value="tag">Tag</option>
           </select>
         </div>
         <div class="filter-group">
@@ -2244,10 +2603,9 @@ export class TaskTableProvider {
             <input type="checkbox" id="selectAllCheckbox" class="select-checkbox" title="Select all tasks" />
           </th>
           <th class="status-cell sortable" data-column="status"></th>
+          <th class="open-file-cell"></th>
           <th class="date-cell sortable" data-column="date">DATE</th>
-          <th class="project-cell sortable" data-column="project">PROJECT</th>
           <th class="task-cell">TASK</th>
-          <th class="tags-cell">TAGS</th>
           <th class="move-cell"></th>
           <th class="insert-cell">
             <span class="codicon codicon-add create-file-icon" title="Create daily file for selected date in selected project"></span>
@@ -2255,6 +2613,11 @@ export class TaskTableProvider {
           <th class="actions-cell">
             <span class="codicon codicon-refresh reload-icon" title="Reload tasks"></span>
           </th>
+        </tr>
+        <tr class="add-row-header-row">
+          <td colspan="9" class="add-row-cell">
+            <button class="add-row-btn add-first-row-btn" title="Add new task as first row">+ add first row</button>
+          </td>
         </tr>
       </thead>
       <tbody>
@@ -2273,19 +2636,28 @@ export class TaskTableProvider {
                 ${task.status ? 'checked' : ''}
               />
             </td>
-            <td class="date-cell">${task.date}</td>
-            <td class="project-cell">${task.project}</td>
+            <td class="open-file-cell">
+              <span class="codicon codicon-link-external open-file-icon" title="Open file"></span>
+            </td>
+            <td class="date-cell">
+              <span class="date-text">${task.date}</span>
+            </td>
             <td class="task-cell">
               <div class="task-cell-content">
-                <span class="codicon codicon-link-external open-file-icon" title="Open file"></span>
-                <input 
-                  type="text" 
-                  class="task-input"
-                  value="${task.task.replace(/"/g, '&quot;')}"
-                />
+                <div class="task-edit-wrapper">
+                  <div class="task-render"></div>
+                  <textarea
+                    rows="1"
+                    class="task-input"
+                    style="display:none"
+                  >${task.task.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
+                </div>
+              </div>
+              <div class="task-meta-row">
+                ${task.project ? `<span class="task-project-label" data-project="${escapeHtml(task.project)}">${escapeHtml(task.project)}</span>` : '<span></span>'}
+                <div class="tags-cell">${extractTags(task.task).map(tag => `<span class="tag" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}<span class="tag-remove">×</span></span>`).join('')}</div>
               </div>
             </td>
-            <td class="tags-cell">${extractTags(task.task).map(tag => `<span class="tag" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}<span class="tag-remove">×</span></span>`).join('')}</td>
             <td class="move-cell">
               <span class="codicon codicon-arrow-right move-icon" title="Move task to another file"></span>
             </td>
@@ -2298,6 +2670,13 @@ export class TaskTableProvider {
           </tr>
         `).join('')}
       </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="9" class="add-row-cell">
+            <button class="add-row-btn add-last-row-btn" title="Add new task as last row">+ add last row</button>
+          </td>
+        </tr>
+      </tfoot>
     </table>
   `}
   
@@ -2309,6 +2688,59 @@ export class TaskTableProvider {
       const div = document.createElement('div');
       div.textContent = str;
       return div.innerHTML;
+    }
+    
+    // Render a task's markdown text as safe HTML
+    function renderMarkdown(text) {
+      if (!text) return '';
+      // Escape HTML first to prevent XSS
+      let html = escapeHtml(text);
+      // Inline code (before bold/italic to avoid conflicts)
+      html = html.replace(new RegExp('\`([^\`]+)\`', 'g'), '<code>$1</code>');
+      // Bold **text** or __text__
+      html = html.replace(new RegExp('[*][*]([^*]+)[*][*]', 'g'), '<strong>$1</strong>');
+      html = html.replace(new RegExp('__([^_]+)__', 'g'), '<strong>$1</strong>');
+      // Italic *text* or _text_
+      html = html.replace(new RegExp('[*]([^*]+)[*]', 'g'), '<em>$1</em>');
+      html = html.replace(new RegExp('_([^_]+)_', 'g'), '<em>$1</em>');
+      // Strikethrough ~~text~~
+      html = html.replace(new RegExp('~~([^~]+)~~', 'g'), '<del>$1</del>');
+      // Wikilinks [[target|alias]] or [[target]]
+      html = html.replace(new RegExp('\\\\[\\\\[([^\\\\]|]+)(?:\\\\|([^\\\\]]+))?\\\\]\\\\]', 'g'), function(_, target, alias) {
+        return '<span class="wikilink">' + escapeHtml(alias || target) + '</span>';
+      });
+      // External links [text](url) - only allow safe schemes
+      html = html.replace(new RegExp('\\\\[([^\\\\]]+)\\\\][(]([^)]+)[)]', 'g'), function(_, linkText, url) {
+        if (new RegExp('^(https?:|obsidian:)', 'i').test(url)) {
+          return '<a href="' + url + '">' + linkText + '</a>';
+        }
+        return linkText;
+      });
+      // Newlines
+      html = html.replace(new RegExp('\\n', 'g'), '<br>');
+      return html;
+    }
+
+    // Switch a task row between view (rendered) and edit (textarea) mode
+    function switchToEditMode(renderDiv) {
+      const wrapper = renderDiv.closest('.task-edit-wrapper');
+      if (!wrapper) return;
+      const textarea = wrapper.querySelector('.task-input');
+      renderDiv.style.display = 'none';
+      textarea.style.height = 'auto';
+      textarea.style.display = 'block';
+      // Size to content, with a minimum of one line
+      textarea.style.height = Math.max(textarea.scrollHeight, 24) + 'px';
+      textarea.focus();
+    }
+
+    function switchToViewMode(textarea) {
+      const wrapper = textarea.closest('.task-edit-wrapper');
+      if (!wrapper) return;
+      const renderDiv = wrapper.querySelector('.task-render');
+      renderDiv.innerHTML = renderMarkdown(textarea.value);
+      renderDiv.style.display = 'block';
+      textarea.style.display = 'none';
     }
     
     // Function to extract hashtags from text
@@ -2511,6 +2943,9 @@ export class TaskTableProvider {
         const row = e.target.closest('tr');
         if (!row) return;
 
+        // Switch back to view mode
+        switchToViewMode(e.target);
+
         // Update tags cell immediately in the DOM from the new text
         const newText = e.target.value;
         const tagsCell = row.querySelector('.tags-cell');
@@ -2532,9 +2967,19 @@ export class TaskTableProvider {
       }
     }, true);
     
-    // Enter key on inputs
+    // Auto-resize textarea as content changes
+    document.addEventListener('input', function(e) {
+      if (e.target.classList.contains('task-input')) {
+        e.target.style.height = 'auto';
+        e.target.style.height = Math.max(e.target.scrollHeight, 24) + 'px';
+      }
+    });
+
+    // Enter key on inputs: Enter = blur/save, Shift+Enter = newline
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Enter' && e.target.classList.contains('task-input')) {
+        if (e.shiftKey) return; // allow newline
+        e.preventDefault();
         e.target.blur();
       }
       
@@ -2563,6 +3008,13 @@ export class TaskTableProvider {
     
     // Click on open-file icon
     document.addEventListener('click', function(e) {
+      // Click on task render div → switch to edit mode
+      if (e.target.classList.contains('task-render') || e.target.closest('.task-render')) {
+        const renderDiv = e.target.classList.contains('task-render') ? e.target : e.target.closest('.task-render');
+        switchToEditMode(renderDiv);
+        return;
+      }
+
       if (e.target.classList.contains('open-file-icon')) {
         const row = e.target.closest('tr');
         if (!row) return;
@@ -2641,6 +3093,32 @@ export class TaskTableProvider {
           date: date
         });
       }
+
+      // Add first row button (top of table)
+      if (e.target.classList.contains('add-first-row-btn')) {
+        const firstRow = document.querySelector('#tasksTable tbody tr[data-task-id]');
+        if (firstRow) {
+          vscode.postMessage({ command: 'addTaskBefore', taskId: firstRow.getAttribute('data-task-id') });
+        } else {
+          const project = currentFilter.length === 1 ? currentFilter[0] : '';
+          const date = currentDateFilter || '';
+          vscode.postMessage({ command: 'addNewTask', project, date });
+        }
+      }
+
+      // Add last row button (bottom of table)
+      if (e.target.classList.contains('add-last-row-btn')) {
+        const rows = document.querySelectorAll('#tasksTable tbody tr[data-task-id]');
+        const lastRow = rows[rows.length - 1];
+        if (lastRow) {
+          vscode.postMessage({ command: 'addTaskAfter', taskId: lastRow.getAttribute('data-task-id') });
+        } else {
+          const project = currentFilter.length === 1 ? currentFilter[0] : '';
+          const date = currentDateFilter || '';
+          vscode.postMessage({ command: 'addNewTask', project, date });
+        }
+      }
+
       
       // Click on tag remove button
       if (e.target.classList.contains('tag-remove')) {
@@ -2686,8 +3164,9 @@ export class TaskTableProvider {
       }
       
       // Click on tags cell to edit tags
-      if (e.target.classList.contains('tags-cell') && e.target.tagName === 'TD') {
-        const row = e.target.closest('tr');
+      const tagsTarget = e.target.classList.contains('tags-cell') ? e.target : e.target.closest('.tags-cell');
+      if (tagsTarget && !e.target.classList.contains('tag-remove') && !e.target.classList.contains('tag')) {
+        const row = tagsTarget.closest('tr');
         if (!row) return;
         
         const taskId = row.getAttribute('data-task-id');
@@ -2727,19 +3206,28 @@ export class TaskTableProvider {
               \${task.status ? 'checked' : ''}
             />
           </td>
-          <td class="date-cell">\${task.date}</td>
-          <td class="project-cell">\${task.project}</td>
+          <td class="open-file-cell">
+            <span class="codicon codicon-link-external open-file-icon" title="Open file"></span>
+          </td>
+          <td class="date-cell">
+            <span class="date-text">\${task.date}</span>
+          </td>
           <td class="task-cell">
             <div class="task-cell-content">
-              <span class="codicon codicon-link-external open-file-icon" title="Open file"></span>
-              <input 
-                type="text" 
-                class="task-input"
-                value="\${task.task.replace(/"/g, '&quot;')}"
-              />
+              <div class="task-edit-wrapper">
+                <div class="task-render"></div>
+                <textarea
+                  rows="1"
+                  class="task-input"
+                  style="display:none"
+                >\${escapeHtml(task.task)}</textarea>
+              </div>
+            </div>
+            <div class="task-meta-row">
+              \${task.project ? '<span class="task-project-label" data-project="' + escapeHtml(task.project) + '">' + escapeHtml(task.project) + '</span>' : '<span></span>'}
+              <div class="tags-cell">\${tagsHtml}</div>
             </div>
           </td>
-          <td class="tags-cell">\${tagsHtml}</td>
           <td class="move-cell">
             <span class="codicon codicon-arrow-right move-icon" title="Move task to another file"></span>
           </td>
@@ -2816,6 +3304,9 @@ export class TaskTableProvider {
       
       // Apply filter after restoring states and sorting
       applyFilter();
+
+      // Initialize all render divs from textarea values
+      document.querySelectorAll('.task-input').forEach(function(ta) { switchToViewMode(ta); });
     }
     
     function applyFilter() {
@@ -2828,7 +3319,7 @@ export class TaskTableProvider {
         const isCompleted = row.querySelector('.task-status-checkbox').checked;
         
         // Date filter
-        const date = row.querySelector('.date-cell').textContent;
+        const date = (row.querySelector('.date-text') || row.querySelector('.date-cell'))?.textContent?.trim() || '';
         const matchesDate = !currentDateFilter || date === currentDateFilter;
         
         // File filter (matches if no filter or file is in selected files array)
@@ -2882,6 +3373,11 @@ export class TaskTableProvider {
       if (currentGroupBy === 'project') return row.getAttribute('data-project') || '';
       if (currentGroupBy === 'date') return row.querySelector('.date-cell')?.textContent?.trim() || '';
       if (currentGroupBy === 'file') return row.getAttribute('data-file') || '';
+      if (currentGroupBy === 'tag') {
+        const taskText = row.querySelector('.task-input')?.value || '';
+        const tags = extractTags(taskText).map(t => t.toLowerCase()).sort();
+        return tags.length > 0 ? tags.join(' ') : '(no tag)';
+      }
       return '';
     }
 
@@ -2946,7 +3442,7 @@ export class TaskTableProvider {
         const headerRow = document.createElement('tr');
         headerRow.className = 'group-header-row';
         const td = document.createElement('td');
-        td.colSpan = 10;
+        td.colSpan = 9;
         td.className = 'group-header-cell';
         td.setAttribute('data-group-key', key);
         td.setAttribute('data-group-type', currentGroupBy);
@@ -3033,11 +3529,11 @@ export class TaskTableProvider {
           aVal = a.querySelector('.task-status-checkbox').checked ? 1 : 0;
           bVal = b.querySelector('.task-status-checkbox').checked ? 1 : 0;
         } else if (currentSort.column === 'date') {
-          aVal = a.querySelector('.date-cell').textContent;
-          bVal = b.querySelector('.date-cell').textContent;
+          aVal = (a.querySelector('.date-text') || a.querySelector('.date-cell'))?.textContent?.trim() || '';
+          bVal = (b.querySelector('.date-text') || b.querySelector('.date-cell'))?.textContent?.trim() || '';
         } else if (currentSort.column === 'project') {
-          aVal = a.querySelector('.project-cell').textContent;
-          bVal = b.querySelector('.project-cell').textContent;
+          aVal = a.getAttribute('data-project') || '';
+          bVal = b.getAttribute('data-project') || '';
         }
         
         let result;
@@ -3261,10 +3757,9 @@ export class TaskTableProvider {
           setTimeout(() => {
             const row = document.querySelector('tr[data-task-id="' + message.focusTaskId + '"]');
             if (row) {
-              const input = row.querySelector('.task-input');
-              if (input) {
-                input.focus();
-                input.select();
+              const renderDiv = row.querySelector('.task-render');
+              if (renderDiv) {
+                switchToEditMode(renderDiv);
               }
             }
           }, 100);
@@ -3359,6 +3854,17 @@ export class TaskTableProvider {
         }
         
         applyFilter();
+      } else if (message.command === 'setGroupBy') {
+        const select = document.getElementById('groupBySelect');
+        if (select) { select.value = message.groupBy; }
+        currentGroupBy = message.groupBy;
+        collapsedGroups.clear();
+        applyGrouping();
+      } else if (message.command === 'setDateFilter') {
+        const dateInput = document.getElementById('dateFilter');
+        if (dateInput) { dateInput.value = message.date; }
+        currentDateFilter = message.date;
+        applyFilter();
       }
     });
     
@@ -3394,56 +3900,37 @@ export class TaskTableProvider {
       }
     });
     
-    // Click on date cells to toggle date filter (only TD, not TH header)
+    // Click on date cells → open VS Code inputBox to reschedule
     document.addEventListener('click', function(e) {
-      if (e.target.classList.contains('date-cell') && e.target.tagName === 'TD') {
-        const clickedDate = e.target.textContent.trim();
-        
-        // Toggle: if same date is clicked, clear filter; otherwise set new filter
-        if (currentDateFilter === clickedDate) {
-          currentDateFilter = '';
-        } else {
-          currentDateFilter = clickedDate;
-        }
-        
-        // Update the date input field
-        const dateInput = document.getElementById('dateFilter');
-        if (dateInput) {
-          dateInput.value = currentDateFilter;
-        }
-        
-        applyFilter();
-      }
-      
-      // Click on project cells to toggle project filter (only TD, not TH header)
-      if (e.target.classList.contains('project-cell') && e.target.tagName === 'TD') {
-        const clickedProject = e.target.textContent.trim();
-        
-        // Toggle: if project is in filter, remove it; otherwise add it
-        const index = currentFilter.indexOf(clickedProject);
-        if (index > -1) {
-          currentFilter.splice(index, 1);
-        } else {
-          currentFilter.push(clickedProject);
-        }
-        
-        // Update the project display
-        const projectFilterDisplay = document.getElementById('projectFilterDisplay');
-        if (projectFilterDisplay) {
-          if (currentFilter.length === 0) {
-            projectFilterDisplay.value = '';
-            projectFilterDisplay.placeholder = 'All Projects';
-          } else if (currentFilter.length === 1) {
-            projectFilterDisplay.value = currentFilter[0];
-            projectFilterDisplay.placeholder = '';
-          } else {
-            projectFilterDisplay.value = currentFilter.length + ' projects selected';
-            projectFilterDisplay.placeholder = '';
-          }
-        }
-        
-        applyFilter();
-      }
+      const isDateText = e.target.classList.contains('date-text');
+      const isDateCell = e.target.classList.contains('date-cell') && e.target.tagName === 'TD';
+      if (!isDateText && !isDateCell) return;
+
+      const td = isDateCell ? e.target : e.target.closest('td.date-cell');
+      if (!td) return;
+
+      const row = td.closest('tr');
+      if (!row) return;
+      const taskId = row.getAttribute('data-task-id');
+      if (!taskId) return;
+
+      const currentDate = td.querySelector('.date-text')?.textContent?.trim() || '';
+      vscode.postMessage({ command: 'requestReschedule', taskId, currentDate });
+    });
+
+    // (date-reschedule-input kept for compat but no longer in DOM)
+
+    // Click on project label → open VS Code QuickPick to change project
+    document.addEventListener('click', function(e) {
+      if (!e.target.classList.contains('task-project-label')) return;
+
+      e.stopPropagation();
+      const row = e.target.closest('tr');
+      if (!row) return;
+      const taskId = row.getAttribute('data-task-id');
+      if (!taskId) return;
+
+      vscode.postMessage({ command: 'requestChangeProject', taskId });
     });
     
     // Project filter - open dialog on click
@@ -3565,6 +4052,9 @@ export class TaskTableProvider {
     
     // Initialize task count
     applyFilter();
+
+    // Initialize render divs on first load
+    document.querySelectorAll('.task-input').forEach(function(ta) { switchToViewMode(ta); });
   </script>
 </body>
 </html>`;

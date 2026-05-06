@@ -697,6 +697,19 @@
           ],
           "description": "Folders to include in the Task Table. Use 'root' to include only date-prefixed files (YYYY-MM-DD*) from the vault root. Use other folder names to include all markdown files from those folders recursively. An empty array [] includes all markdown files from the entire vault."
         },
+        "obsidianManager.taskTableInitialGroupBy": {
+          "type": "string",
+          "enum": ["none", "project", "date", "file"],
+          "default": "none",
+          "description": "Default grouping for the Task Table when it opens. 'none' = no grouping, 'project' = group by project folder, 'date' = group by date, 'file' = group by file."
+        },
+        "obsidianManager.taskTableInitialDateFilter": {
+          "type": "string",
+          "enum": ["", "today"],
+          "enumDescriptions": ["No date filter (show all tasks)", "Show only tasks for today's date (dynamically computed)"],
+          "default": "today",
+          "description": "Initial date filter for the Task Table. 'today' dynamically filters to the current date when the table opens."
+        },
         "obsidianManager.newFileOpenMode": {
           "type": "string",
           "enum": [
